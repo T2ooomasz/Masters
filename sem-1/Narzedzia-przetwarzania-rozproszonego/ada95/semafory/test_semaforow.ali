@@ -1,0 +1,166 @@
+V "GNAT Lib v13"
+M P W=b
+P SS ZX
+
+RN
+RV NO_DELAY
+RV NO_EXCEPTION_HANDLERS
+RV NO_EXCEPTIONS
+RV NO_FIXED_POINT
+RV NO_IO
+RV NO_IMPLICIT_CONDITIONALS
+RV NO_LOCAL_PROTECTED_OBJECTS
+RV NO_NESTED_FINALIZATION
+RV NO_RELATIVE_DELAY
+RV NO_SECONDARY_STACK
+RV NO_STANDARD_STORAGE_POOLS
+RV NO_TASK_HIERARCHY
+RV NO_TASKING
+RV NO_DEFAULT_INITIALIZATION
+RV NO_DYNAMIC_SIZED_OBJECTS
+RV NO_IMPLICIT_LOOPS
+RV MAX_TASK_ENTRIES=1
+RV MAX_TASKS=1+
+RV MAX_ENTRY_QUEUE_LENGTH=1+
+
+U test_semaforow%b	test_semaforow.adb	f92cb136 NE OO SU
+W ada%s			ada.ads			ada.ali
+Z ada.calendar.delays%s	a-caldel.adb		a-caldel.ali
+Z ada.exceptions%s	a-except.adb		a-except.ali
+Z ada.real_time%s	a-reatim.adb		a-reatim.ali
+Z ada.strings.text_buffers%s  a-sttebu.adb	a-sttebu.ali
+W ada.text_io%s		a-textio.adb		a-textio.ali
+W semafor_ogolny%s	semafor_ogolny.adb	semafor_ogolny.ali
+W semafor_uogolniony%s	semafor_uogolniony.adb	semafor_uogolniony.ali
+Z system%s		system.ads		system.ali
+Z system.concat_3%s	s-conca3.adb		s-conca3.ali
+Z system.img_int%s	s-imgint.ads		s-imgint.ali
+Z system.parameters%s	s-parame.adb		s-parame.ali
+Z system.secondary_stack%s  s-secsta.adb	s-secsta.ali
+Z system.soft_links%s	s-soflin.adb		s-soflin.ali
+Z system.task_info%s	s-tasinf.adb		s-tasinf.ali
+Z system.tasking%s	s-taskin.adb		s-taskin.ali
+Z system.tasking.protected_objects%s  s-taprob.adb  s-taprob.ali
+Z system.tasking.protected_objects.operations%s  s-tpobop.adb  s-tpobop.ali
+Z system.tasking.rendezvous%s  s-tasren.adb	s-tasren.ali
+Z system.tasking.stages%s  s-tassta.adb		s-tassta.ali
+
+D ada.ads		20240521074738 76789da1 ada%s
+D a-assert.ads		20240521074737 ba465f5c ada.assertions%s
+D a-calend.ads		20240904144414 e6961b4c ada.calendar%s
+D a-caldel.ads		20240521074737 9f20b83d ada.calendar.delays%s
+D a-except.ads		20240521074738 2a7d8d70 ada.exceptions%s
+D a-finali.ads		20240521074738 bf4f806b ada.finalization%s
+D a-ioexce.ads		20240521074738 40018c65 ada.io_exceptions%s
+D a-numeri.ads		20240521074738 84bea7a3 ada.numerics%s
+D a-nubinu.ads		20240521074738 93f1f3d1 ada.numerics.big_numbers%s
+D a-nbnbig.ads		20240521074738 711e0174 ada.numerics.big_numbers.big_integers_ghost%s
+D a-reatim.ads		20240521074737 b89a10c3 ada.real_time%s
+D a-stream.ads		20240521074738 119b8fb3 ada.streams%s
+D a-string.ads		20240521074738 90ac6797 ada.strings%s
+D a-sttebu.ads		20240521074738 f1ad67a2 ada.strings.text_buffers%s
+D a-stuten.ads		20240521074738 c6ced0ae ada.strings.utf_encoding%s
+D a-tags.ads		20240521074738 9eaa38c6 ada.tags%s
+D a-textio.ads		20240521074738 5c2c6153 ada.text_io%s
+D a-unccon.ads		20240521074738 0e9b276f ada.unchecked_conversion%s
+D interfac.ads		20240521074738 15f799c2 interfaces%s
+D i-c.ads		20240521074738 5c5a6c17 interfaces.c%s
+D i-cstrea.ads		20240521074738 e53d8b8e interfaces.c_streams%s
+D semafor_ogolny.ads	20250607204241 504ff21f semafor_ogolny%s
+D semafor_uogolniony.ads  20250607204241 031e6bfa semafor_uogolniony%s
+D system.ads		20240521074738 426dafb8 system%s
+D s-atacco.ads		20240521074738 903317eb system.address_to_access_conversions%s
+D s-assert.ads		20240521074738 9c4520c7 system.assertions%s
+D s-c_time.ads		20240904144414 535885c5 system.c_time%s
+D s-casuti.ads		20240521074738 cf13d755 system.case_util%s
+D s-conca3.ads		20240521074738 8a7a19a2 system.concat_3%s
+D s-crtl.ads		20240521074738 8a0692f8 system.crtl%s
+D s-exctab.ads		20240521074738 91bef6ef system.exception_table%s
+D s-ficobl.ads		20240521074738 dc5161d4 system.file_control_block%s
+D s-finroo.ads		20240521074738 4ff27390 system.finalization_root%s
+D s-imagei.ads		20240521074738 c707dfd0 system.image_i%s
+D s-imgint.ads		20240521074738 d4a52a9b system.img_int%s
+D s-linux.ads		20240904144414 96312dab system.linux%s
+D s-multip.ads		20240521074738 38ac9f73 system.multiprocessors%s
+D s-oscons.ads		20240904144414 ece202eb system.os_constants%s
+D s-osinte.ads		20240904144414 a8f58951 system.os_interface%s
+D s-parame.ads		20240904144414 1f39ba92 system.parameters%s
+D s-putima.ads		20240521074738 17291fe4 system.put_images%s
+D s-secsta.ads		20240521074738 578279f5 system.secondary_stack%s
+D s-soflin.ads		20240521074738 df77073e system.soft_links%s
+D s-stache.ads		20240521074738 0b81c1fe system.stack_checking%s
+D s-stausa.ads		20240521074738 5be75682 system.stack_usage%s
+D s-stalib.ads		20240521074738 1c9580f6 system.standard_library%s
+D s-stoele.ads		20240521074738 ab5468e4 system.storage_elements%s
+D s-stoele.adb		20240521074738 8f5a9db6 system.storage_elements%b
+D s-tasinf.ads		20240521074737 528dde74 system.task_info%s
+D s-taspri.ads		20240521074737 4ec891e7 system.task_primitives%s
+D s-taprop.ads		20240521074737 6eefbe12 system.task_primitives.operations%s
+D s-taskin.ads		20240521074737 0ec7ab0b system.tasking%s
+D s-taprob.ads		20240521074737 acd6094d system.tasking.protected_objects%s
+D s-tpoben.ads		20240521074737 60ad3dae system.tasking.protected_objects.entries%s
+D s-tpobop.ads		20240521074737 5f548bb3 system.tasking.protected_objects.operations%s
+D s-tasren.ads		20240521074737 a67a9949 system.tasking.rendezvous%s
+D s-tassta.ads		20240521074737 cca55c94 system.tasking.stages%s
+D s-traent.ads		20240521074738 c81cbf8c system.traceback_entries%s
+D s-unstyp.ads		20240521074738 fa2a7f59 system.unsigned_types%s
+D s-valint.ads		20240521074738 1f610d7a system.val_int%s
+D s-valuns.ads		20240521074738 e8a1f424 system.val_uns%s
+D s-valuti.ads		20240521074738 fcd603d8 system.val_util%s
+D s-valuei.ads		20240521074738 11081e09 system.value_i%s
+D s-vaispe.ads		20240521074738 44130d39 system.value_i_spec%s
+D s-valueu.ads		20240521074738 18770347 system.value_u%s
+D s-vauspe.ads		20240521074738 a67b2f28 system.value_u_spec%s
+D s-wchcon.ads		20240521074738 d9032363 system.wch_con%s
+D s-widuns.ads		20240521074738 866a5800 system.wid_uns%s
+D s-widthu.ads		20240521074738 b32f15e2 system.width_u%s
+D test_semaforow.adb	20250607204414 f6514980 test_semaforow%b
+G a e
+G c Z b b [test_semaforow standard 10 11 none]
+G r s binary_semaphore [test_semaforow standard 10 11 none] [binary_semaphoreVIP semafor_ogolny 11 4 none]
+G r s counting_semaphore [test_semaforow standard 10 11 none] [counting_semaphoreVIP semafor_uogolniony 12 4 none]
+G r o none [test_semaforow standard 10 11 none] [p semafor_ogolny__binary_semaphore 15 13 none]
+G r p none [test_semaforow standard 10 11 none] [v semafor_ogolny__binary_semaphore 19 17 none]
+G r o none [test_semaforow standard 10 11 none] [p semafor_uogolniony__counting_semaphore 15 13 none]
+G r p none [test_semaforow standard 10 11 none] [v semafor_uogolniony__counting_semaphore 19 17 none]
+X 1 ada.ads
+16K9*Ada 20e8 70|6r6 35r7 41r7 47r7 59r7 65r7 71r7 79r4 80r4 81r4 91r4 92r4
+. 93r4 94r4 95r4
+X 17 a-textio.ads
+58K13*Text_IO 787e16 70|6w10 35r11 41r11 47r11 59r11 65r11 71r11 79r8 80r8
+. 81r8 91r8 92r8 93r8 94r8 95r8
+282U14*New_Line 70|81s16 91s16 95s16
+566U14*Put_Line 70|35s19 41s19 47s19 59s19 65s19 71s19 79s16 80s16 92s16
+. 93s16 94s16
+X 22 semafor_ogolny.ads
+6K9*Semafor_Ogolny 27e19 70|7w6 13r14
+11W19*Binary_Semaphore 25e24 70|13r29
+15Y13 P 70|39s15
+19U17 V 70|45s15
+X 23 semafor_uogolniony.ads
+6K9*Semafor_Uogolniony 30e23 70|8w6 14r16
+12W19*Counting_Semaphore 28e26 70|14r35
+15Y13 P 70|63s17
+19U17 V 70|69s17
+X 45 s-stausa.ads
+207U14*Initialize 208i<c,__gnat_stack_usage_initialize>22
+272U14*Output_Results 276i<c,__gnat_stack_usage_output_results>22
+X 70 test_semaforow.adb
+10U11*Test_Semaforow 10b11 106l5 106t19
+13w4 Sem_Bin{22|11W19} 39r7 45r7
+14w4 Sem_Count{23|12W19} 63r7 69r7
+17T14 Binary_Task 19l8 19e19 27b14 48l8 48t19 75r34
+18Y13 Start 18>19 31b14 33l11 33t16 86s23
+18i19 ID{integer} 32r21
+22T14 Counting_Task 24l8 24e21 51b14 72l8 72t21 76r36
+23Y13 Start 23>19 55b14 57l11 57t16 100s25
+23i19 ID{integer} 56r21
+28i7 Task_ID{integer} 32m10 35r58 41r58 47r58
+31i20 ID{integer}
+52i7 Task_ID{integer} 56m10 59r60 65r60 71r60
+55i20 ID{integer}
+75a4 Binary_Tasks(17T14) 85r13 86r7
+76a4 Counting_Tasks(22T14) 99r13 100r7
+85i8 I{integer} 86r20 86r29
+99i8 I{integer} 100r22 100r31
+
