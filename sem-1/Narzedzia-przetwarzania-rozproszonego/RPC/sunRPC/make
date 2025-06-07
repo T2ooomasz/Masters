@@ -1,0 +1,35 @@
+# Makefile dla Sun RPC - Zdalny licznik
+
+# Źródła generowane przez rpcgen
+SOURCES.x = licznik.x
+
+# Poprawka zgodnie z instrukcją
+LDLIBS += -ltirpc
+
+# Cele
+all: licznik_server licznik_client
+
+# Wygenerowanie plików z interfejsu RPC
+licznik.h licznik_clnt.c licznik_svc.c: licznik.x
+	rpcgen -a licznik.x
+
+# Kompilacja serwera
+licznik_server: licznik_server.c licznik_svc.c licznik.h
+	$(CC) -o licznik_server licznik_server.c licznik_svc.c $(LDLIBS)
+
+# Kompilacja klienta  
+licznik_client: licznik_client.c licznik_clnt.c licznik.h
+	$(CC) -o licznik_client licznik_client.c licznik_clnt.c $(LDLIBS)
+
+# Czyszczenie
+clean:
+	rm -f licznik_server licznik_client
+	rm -f licznik.h licznik_clnt.c licznik_svc.c
+	rm -f licznik_client.c licznik_server.c
+	rm -f makefile.licznik
+
+# Czyszczenie tylko binarnych
+clean-bin:
+	rm -f licznik_server licznik_client
+
+.PHONY: all clean clean-bin
