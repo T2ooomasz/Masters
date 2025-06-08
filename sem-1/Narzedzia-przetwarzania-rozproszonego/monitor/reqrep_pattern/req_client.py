@@ -19,6 +19,9 @@ import argparse
 from datetime import datetime
 from typing import Dict, Any, Optional, List
 
+# Stałe do obsługi programu
+PORT = 5555
+
 # Konfiguracja logowania
 logging.basicConfig(
     level=logging.INFO,
@@ -40,7 +43,7 @@ class REQREPClient:
         request_stats: Statystyki wysłanych żądań
     """
     
-    def __init__(self, server_address: str = "tcp://localhost:5555", timeout_ms: int = 5000):
+    def __init__(self, server_address: str = f"tcp://localhost:{PORT}", timeout_ms: int = 5000): #f"tcp://*:{port}"
         """
         Inicjalizacja klienta REQ-REP
         
@@ -461,9 +464,6 @@ class REQREPClient:
                     print(f"✗ ERROR: {response.get('error_message', 'Unknown error')}")
             else:
                 print("✗ REQUEST FAILED (timeout or error)")
-            
-            # Pauza między żądaniami
-            time.sleep(0.5)
         
         print(f"\n=== Demo completed ===")
         self.print_stats()
@@ -484,7 +484,7 @@ def main():
     Główna funkcja - parsuje argumenty i uruchamia klienta
     """
     parser = argparse.ArgumentParser(description='REQ-REP Client')
-    parser.add_argument('--server', default='tcp://localhost:5555', help='Server address')
+    parser.add_argument('--server', default=f"tcp://localhost:{PORT}", help='Server address')
     parser.add_argument('--timeout', type=int, default=5000, help='Timeout in milliseconds')
     parser.add_argument('--interactive', '-i', action='store_true', help='Interactive mode')
     parser.add_argument('--demo', '-d', action='store_true', help='Automatic demo mode')

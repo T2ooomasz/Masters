@@ -18,6 +18,9 @@ import logging
 from datetime import datetime, timedelta
 from typing import Dict, Any, Optional
 
+# Stałe do obsługi programu
+PORT = 5555
+
 # Konfiguracja logowania
 logging.basicConfig(
     level=logging.INFO,
@@ -38,12 +41,12 @@ class REQREPServer:
         is_running: Flaga kontrolująca główną pętlę serwera
     """
     
-    def __init__(self, port: int = 5555):
+    def __init__(self, port: int = PORT):
         """
         Inicjalizacja serwera REQ-REP
         
         Args:
-            port: Port na którym serwer nasłuchuje (domyślnie 5555)
+            port: Port na którym serwer nasłuchuje (domyślnie PORT)
         """
         # Konfiguracja ØMQ
         self.context = zmq.Context()
@@ -280,17 +283,7 @@ class REQREPServer:
         
         logger.info(f"CALCULATE from {client_id}: {operation}({a}, {b})")
         
-        # Symulacja różnych czasów obliczeń
-        calculation_time = {
-            'add': 0.05,
-            'subtract': 0.05,
-            'multiply': 0.1,
-            'divide': 0.15,
-            'power': 0.2
-        }.get(operation, 0.1)
-        
-        time.sleep(calculation_time)
-        
+        calculation_time_start = time.time()
         try:
             if operation == 'add':
                 result = a + b
@@ -313,7 +306,7 @@ class REQREPServer:
                 'operation': operation,
                 'operands': {'a': a, 'b': b},
                 'result': result,
-                'calculation_time_ms': calculation_time * 1000,
+                'calculation_time_ms': calculation_time_start - time.time(),
                 'timestamp': datetime.now().isoformat()
             }
             
@@ -433,7 +426,7 @@ def main():
     server = None
     try:
         # Tworzenie i uruchomienie serwera
-        server = REQREPServer(port=5555)
+        server = REQREPServer(port=PORT)
         server.start()
         
     except KeyboardInterrupt:
