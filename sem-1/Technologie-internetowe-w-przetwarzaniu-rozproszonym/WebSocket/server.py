@@ -4,6 +4,8 @@ import json
 import random
 import struct
 
+BALL_SPEED = 1.0
+
 # Lista aktywnych gier
 games = []
 next_game_id = 0
@@ -19,8 +21,8 @@ class Game:
             "paddle2_y": 275.0, # Pozycja Y paletki gracza 2
             "score1": 0,       # Wynik gracza 1
             "score2": 0,       # Wynik gracza 2
-            "ball_dx": 5.0 if random.random() > 0.5 else -5.0, # Prędkość X piłki
-            "ball_dy": 5.0 if random.random() > 0.5 else -5.0  # Prędkość Y piłki
+            "ball_dx": BALL_SPEED if random.random() > 0.5 else -BALL_SPEED, # Prędkość X piłki
+            "ball_dy": BALL_SPEED if random.random() > 0.5 else -BALL_SPEED  # Prędkość Y piłki
         }
 
     def add_player(self, ws, player_id):
@@ -55,14 +57,14 @@ class Game:
         """Resetuje piłkę na środek po zdobyciu punktu."""
         self.state["ball_x"] = 400.0
         self.state["ball_y"] = 300.0
-        self.state["ball_dx"] = 5.0 if random.random() > 0.5 else -5.0
-        self.state["ball_dy"] = 5.0 if random.random() > 0.5 else -5.0
+        self.state["ball_dx"] = BALL_SPEED if random.random() > 0.5 else -BALL_SPEED
+        self.state["ball_dy"] = BALL_SPEED if random.random() > 0.5 else -BALL_SPEED
 
     async def send_state(self):
         """Wysyła stan gry do wszystkich graczy w formacie binarnym."""
-        buffer = struct.pack("<Bfffffhh", 2, self.state["ball_x"], self.state["ball_y"],
-                             self.state["paddle1_y"], self.state["paddle2_y"],
-                             self.state["score1"], self.state["score2"])
+        buffer = struct.pack("<Bffffhh", 2, self.state["ball_x"], self.state["ball_y"],
+                            self.state["paddle1_y"], self.state["paddle2_y"],
+                            self.state["score1"], self.state["score2"])
         for player in self.players:
             if player["connected"]:
                 await player["ws"].send(buffer)
