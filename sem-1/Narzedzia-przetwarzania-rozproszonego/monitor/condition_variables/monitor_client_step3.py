@@ -1,302 +1,383 @@
 #!/usr/bin/env python3
 """
-Monitor Client - Etap 3
-Distributed Monitor Client Library
+Monitor Client - Etap 3: Condition Variables
+Biblioteka klienta do komunikacji z distributed monitor.
 
-API transparentne jak zwykły monitor:
-- enter() - wejście do monitora
-- exit() - wyjście z monitora
-- wait(condition) - czekaj na warunek
-- signal(condition) - obudź jeden proces
-- broadcast(condition) - obudź wszystkie procesy
+Oferuje transparentne API podobne do standardowych monitorów:
+- enter() / exit() - wejście/wyjście z monitora
+- wait(condition) - oczekiwanie na warunek
+- signal(condition) - sygnalizacja warunku (budzi jeden proces)
+- broadcast(condition) - broadcast warunku (budzi wszystkie procesy)
 
 Użycie:
-monitor = MonitorClient("tcp://localhost:5555")
-monitor.enter()
-try:
-    while not condition:
-        monitor.wait("condition_name")
-    # sekcja krytyczna
-    monitor.signal("other_condition")
-finally:
-    monitor.exit()
+    monitor = DistributedMonitor("tcp://localhost:5555")
+    monitor.enter()
+    try:
+        while not ready:
+            monitor.wait("data_ready")
+        # sekcja krytyczna
+        monitor.signal("space_available")
+    finally:
+        monitor.exit()
 """
 
 import zmq
 import json
-import time
 import uuid
+import time
 import logging
-from typing import Optional
+from typing import Optional, Dict, Any
+from contextlib import contextmanager
 
 # Konfiguracja logowania
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger('MonitorClient')
 
-class MonitorClient:
+class DistributedMonitorError(Exception):
+    """Wyjątek specyficzny dla distributed monitor"""
+    pass
+
+class DistributedMonitor:
     """
-    Klient distributed monitora.
+    Klient distributed monitor - transparentne API dla synchronizacji rozproszonej.
     
-    Zapewnia transparentne API podobne do lokalnych monitorów.
-    Komunikuje się z MonitorServer przez ØMQ REQ-REP.
+    Główne założenia:
+    - Każdy klient ma unikalny ID
+    - Komunikacja przez REQ-REP zapewnia niezawodność
+    - API przypomina standardowe monitory
+    - Automatyczne zarządzanie połączeniem
     """
     
-    def __init__(self, server_address: str = "tcp://localhost:5555"):
+    def __init__(self, server_address: str = "tcp://localhost:5555", timeout: int = 5000):
+        """
+        Inicjalizacja klienta monitora.
+        
+        Args:
+            server_address: Adres serwera monitora
+            timeout: Timeout dla operacji ZMQ (ms)
+        """
         self.server_address = server_address
-        
-        # Unikalny ID tego procesu/klienta
-        self.process_id = f"client_{uuid.uuid4().hex[:8]}"
-        
-        # ØMQ setup
-        self.context = zmq.Context()
-        self.socket = self.context.socket(zmq.REQ)
-        self.socket.connect(server_address)
+        self.timeout = timeout
+        self.client_id = f"client_{uuid.uuid4().hex[:8]}"
         
         # Stan klienta
         self.has_mutex = False
-        self.is_waiting = False
+        self.is_connected = False
         
-        logger.info(f"Monitor Client {self.process_id} połączony z {server_address}")
+        # ZMQ setup
+        self.context = zmq.Context()
+        self.socket = self.context.socket(zmq.REQ)
+        self.socket.setsockopt(zmq.RCVTIMEO, timeout)
+        self.socket.setsockopt(zmq.SNDTIMEO, timeout)
+        
+        logger.info(f"Klient {self.client_id} utworzony")
     
-    def _send_request(self, action: str, condition: Optional[str] = None) -> dict:
+    def connect(self):
+        """Nawiązanie połączenia z serwerem"""
+        if not self.is_connected:
+            self.socket.connect(self.server_address)
+            self.is_connected = True
+            logger.info(f"Klient {self.client_id} połączony z {self.server_address}")
+    
+    def disconnect(self):
+        """Rozłączenie z serwerem"""
+        if self.is_connected:
+            if self.has_mutex:
+                logger.warning(f"Klient {self.client_id} rozłącza się mając mutex - wymuszam exit")
+                try:
+                    self.exit()
+                except:
+                    pass
+            
+            self.socket.close()
+            self.context.term()
+            self.is_connected = False
+            logger.info(f"Klient {self.client_id} rozłączony")
+    
+    def _send_request(self, action: str, **kwargs) -> Dict[str, Any]:
         """
-        Wyślij żądanie do serwera i otrzymaj odpowiedź.
+        Wysłanie żądania do serwera i oczekiwanie na odpowiedź.
         
         Args:
             action: Typ akcji (ENTER_MONITOR, EXIT_MONITOR, etc.)
-            condition: Nazwa warunku (dla wait/signal/broadcast)
-        
+            **kwargs: Dodatkowe parametry żądania
+            
         Returns:
             Odpowiedź serwera jako dict
+            
+        Raises:
+            DistributedMonitorError: W przypadku błędu komunikacji lub odmowy serwera
         """
+        if not self.is_connected:
+            self.connect()
+        
+        # Przygotowanie żądania
         request = {
-            "action": action,
-            "process_id": self.process_id
+            'action': action,
+            'client_id': self.client_id,
+            'timestamp': time.time(),
+            **kwargs
         }
         
-        if condition is not None:
-            request["condition"] = condition
-        
-        # Wyślij żądanie
-        request_json = json.dumps(request)
-        logger.debug(f"Wysyłam: {request_json}")
-        self.socket.send_string(request_json)
-        
-        # Odbierz odpowiedź
-        response_json = self.socket.recv_string()
-        logger.debug(f"Otrzymałem: {response_json}")
-        response = json.loads(response_json)
-        
-        return response
+        try:
+            # Wysłanie żądania
+            self.socket.send_json(request)
+            logger.debug(f"Wysłano żądanie: {action}")
+            
+            # Oczekiwanie na odpowiedź
+            response = self.socket.recv_json()
+            logger.debug(f"Otrzymano odpowiedź: {response}")
+            
+            return response
+            
+        except zmq.Again:
+            raise DistributedMonitorError(f"Timeout podczas komunikacji z serwerem ({self.timeout}ms)")
+        except Exception as e:
+            raise DistributedMonitorError(f"Błąd komunikacji: {e}")
     
-    def enter(self, timeout: Optional[float] = None) -> bool:
+    def enter(self) -> bool:
         """
-        Wejdź do monitora (uzyskaj mutex).
+        Wejście do monitora (acquire mutex).
         
-        Blokuje dopóki nie otrzyma dostępu.
-        
-        Args:
-            timeout: Maksymalny czas oczekiwania w sekundach (None = bez limitu)
+        Semantyka:
+        - Blokuje dopóki mutex nie zostanie przyznany
+        - Zwraca True gdy mutex zostanie przyznany
         
         Returns:
-            True jeśli uzyskano dostęp, False przy timeout
+            True gdy mutex przyznany
+            
+        Raises:
+            DistributedMonitorError: W przypadku błędu
         """
         if self.has_mutex:
-            logger.warning("Już mam mutex - enter() ignorowane")
-            return True
+            raise DistributedMonitorError("Klient już ma mutex")
         
-        start_time = time.time()
+        logger.info(f"Klient {self.client_id} próbuje wejść do monitora")
         
         while True:
-            response = self._send_request("ENTER_MONITOR")
+            response = self._send_request('ENTER_MONITOR')
             
-            if response["status"] == "GRANTED":
+            if response['status'] == 'GRANTED':
                 self.has_mutex = True
-                logger.info(f"Otrzymałem mutex")
+                logger.info(f"Klient {self.client_id} wszedł do monitora")
                 return True
-            elif response["status"] == "DENIED":
-                # Czekamy w kolejce
-                queue_pos = response.get("queue_position", "?")
-                logger.info(f"Czekam na mutex (pozycja w kolejce: {queue_pos})")
                 
-                # Sprawdź timeout
-                if timeout is not None:
-                    elapsed = time.time() - start_time
-                    if elapsed >= timeout:
-                        logger.warning(f"Timeout podczas oczekiwania na mutex")
-                        return False
+            elif response['status'] == 'QUEUED':
+                position = response.get('position', '?')
+                logger.info(f"Klient {self.client_id} w kolejce (pozycja {position})")
+                time.sleep(0.1)  # Krótkie oczekiwanie przed ponowną próbą
                 
-                # Poczekaj przed ponownym sprawdzeniem
-                time.sleep(0.1)
+            elif response['status'] == 'ERROR':
+                raise DistributedMonitorError(f"Błąd wejścia: {response.get('message', 'Nieznany błąd')}")
+            
             else:
-                logger.error(f"Błąd podczas enter(): {response}")
-                return False
+                raise DistributedMonitorError(f"Nieoczekiwana odpowiedź: {response}")
     
-    def exit(self):
+    def exit(self) -> bool:
         """
-        Wyjdź z monitora (zwolnij mutex).
+        Wyjście z monitora (release mutex).
+        
+        Returns:
+            True gdy mutex został zwolniony
+            
+        Raises:
+            DistributedMonitorError: W przypadku błędu
         """
         if not self.has_mutex:
-            logger.warning("Nie mam mutex - exit() ignorowane")
-            return
+            raise DistributedMonitorError("Klient nie ma mutex")
         
-        response = self._send_request("EXIT_MONITOR")
+        logger.info(f"Klient {self.client_id} wychodzi z monitora")
         
-        if response["status"] == "OK":
+        response = self._send_request('EXIT_MONITOR')
+        
+        if response['status'] == 'RELEASED':
             self.has_mutex = False
-            logger.info("Zwolniłem mutex")
+            logger.info(f"Klient {self.client_id} wyszedł z monitora")
+            return True
+        elif response['status'] == 'ERROR':
+            raise DistributedMonitorError(f"Błąd wyjścia: {response.get('message', 'Nieznany błąd')}")
         else:
-            logger.error(f"Błąd podczas exit(): {response}")
+            raise DistributedMonitorError(f"Nieoczekiwana odpowiedź: {response}")
     
-    def wait(self, condition: str, timeout: Optional[float] = None) -> bool:
+    def wait(self, condition: str):
         """
-        Czekaj na warunek.
+        Oczekiwanie na warunek.
         
-        Zwalnia mutex i czeka aż inny proces wywoła signal/broadcast.
-        Po obudzeniu ponownie uzyskuje mutex.
+        Kluczowa semantyka monitora:
+        1. Klient MUSI mieć mutex
+        2. wait() ZWALNIA mutex i blokuje klienta
+        3. Klient zostaje obudzony przez signal() lub broadcast()
+        4. Po obudzeniu klient MUSI ponownie zdobyć mutex
         
         Args:
             condition: Nazwa warunku do oczekiwania
-            timeout: Maksymalny czas oczekiwania w sekundach
-        
-        Returns:
-            True jeśli obudzony przez signal, False przy timeout/błędzie
+            
+        Raises:
+            DistributedMonitorError: W przypadku błędu
         """
         if not self.has_mutex:
-            logger.error("Musisz mieć mutex żeby wait()")
-            return False
+            raise DistributedMonitorError("Musisz mieć mutex żeby wykonać wait")
         
-        # Poinformuj serwer że czekamy
-        response = self._send_request("WAIT_CONDITION", condition)
+        logger.info(f"Klient {self.client_id} czeka na warunek '{condition}'")
         
-        if response["status"] != "OK":
-            logger.error(f"Błąd podczas wait(): {response}")
-            return False
+        # Wyślij żądanie wait - to ZWALNIA mutex
+        response = self._send_request('WAIT_CONDITION', condition=condition)
         
-        # Mutex został zwolniony przez serwer
-        self.has_mutex = False
-        self.is_waiting = True
-        logger.info(f"Czekam na warunek '{condition}'")
-        
-        # Czekaj na ponowne uzyskanie mutex (po signal/broadcast)
-        start_time = time.time()
-        
-        while self.is_waiting:
-            # Sprawdź czy możemy ponownie uzyskać mutex
-            response = self._send_request("ENTER_MONITOR")
+        if response['status'] == 'WAITING':
+            self.has_mutex = False  # Mutex został zwolniony
+            logger.info(f"Klient {self.client_id} oczekuje na warunek '{condition}'")
             
-            if response["status"] == "GRANTED":
+            # Teraz blokujemy w oczekiwaniu na obudzenie i ponowne zdobycie mutex
+            self._wait_for_wakeup()
+            
+        elif response['status'] == 'ERROR':
+            raise DistributedMonitorError(f"Błąd wait: {response.get('message', 'Nieznany błąd')}")
+        else:
+            raise DistributedMonitorError(f"Nieoczekiwana odpowiedź: {response}")
+    
+    def _wait_for_wakeup(self):
+        """
+        Oczekiwanie na obudzenie i ponowne zdobycie mutex.
+        
+        Po wywołaniu wait(), klient musi:
+        1. Czekać aż zostanie obudzony przez signal/broadcast
+        2. Ponownie zdobyć mutex (może czekać w kolejce)
+        """
+        logger.info(f"Klient {self.client_id} oczekuje na obudzenie")
+        
+        # Cykliczne sprawdzanie czy mamy już mutex (zostaliśmy obudzeni)
+        while not self.has_mutex:
+            response = self._send_request('ENTER_MONITOR')
+            
+            if response['status'] == 'GRANTED':
                 self.has_mutex = True
-                self.is_waiting = False
-                logger.info(f"Obudzony z warunku '{condition}', mam mutex")
-                return True
-            
-            # Sprawdź timeout
-            if timeout is not None:
-                elapsed = time.time() - start_time
-                if elapsed >= timeout:
-                    self.is_waiting = False
-                    logger.warning(f"Timeout podczas wait na '{condition}'")
-                    return False
-            
-            # Poczekaj przed ponownym sprawdzeniem
-            time.sleep(0.1)
-        
-        return False
+                logger.info(f"Klient {self.client_id} obudzony i ponownie ma mutex")
+                break
+                
+            elif response['status'] == 'QUEUED':
+                # Wciąż czekamy
+                time.sleep(0.1)
+                
+            elif response['status'] == 'ERROR':
+                raise DistributedMonitorError(f"Błąd podczas oczekiwania na obudzenie: {response.get('message')}")
     
     def signal(self, condition: str):
         """
-        Sygnalizuj warunek - obudź jeden czekający proces.
+        Sygnalizacja warunku - budzi JEDEN oczekujący proces.
         
         Args:
             condition: Nazwa warunku do sygnalizacji
+            
+        Raises:
+            DistributedMonitorError: W przypadku błędu
         """
         if not self.has_mutex:
-            logger.error("Musisz mieć mutex żeby signal()")
-            return
+            raise DistributedMonitorError("Musisz mieć mutex żeby sygnalizować")
         
-        response = self._send_request("SIGNAL_CONDITION", condition)
+        logger.info(f"Klient {self.client_id} sygnalizuje warunek '{condition}'")
         
-        if response["status"] == "OK":
-            logger.info(f"Sygnalizowałem warunek '{condition}': {response.get('message', '')}")
-        else:
-            logger.error(f"Błąd podczas signal(): {response}")
+        response = self._send_request('SIGNAL_CONDITION', condition=condition)
+        
+        if response['status'] == 'SIGNALED':
+            woken = response.get('woken_processes', 0)
+            logger.info(f"Sygnalizacja '{condition}': obudzono {woken} procesów")
+        elif response['status'] == 'ERROR':
+            raise DistributedMonitorError(f"Błąd signal: {response.get('message', 'Nieznany błąd')}")
     
     def broadcast(self, condition: str):
         """
-        Broadcast warunek - obudź wszystkie czekające procesy.
+        Broadcast warunku - budzi WSZYSTKIE oczekujące procesy.
         
         Args:
             condition: Nazwa warunku do broadcast
+            
+        Raises:
+            DistributedMonitorError: W przypadku błędu
         """
         if not self.has_mutex:
-            logger.error("Musisz mieć mutex żeby broadcast()")
-            return
+            raise DistributedMonitorError("Musisz mieć mutex żeby broadcastować")
         
-        response = self._send_request("BROADCAST_CONDITION", condition)
+        logger.info(f"Klient {self.client_id} broadcastuje warunek '{condition}'")
         
-        if response["status"] == "OK":
-            logger.info(f"Broadcast warunek '{condition}': {response.get('message', '')}")
-        else:
-            logger.error(f"Błąd podczas broadcast(): {response}")
+        response = self._send_request('BROADCAST_CONDITION', condition=condition)
+        
+        if response['status'] == 'BROADCASTED':
+            woken = response.get('woken_processes', 0)
+            logger.info(f"Broadcast '{condition}': obudzono {woken} procesów")
+        elif response['status'] == 'ERROR':
+            raise DistributedMonitorError(f"Błąd broadcast: {response.get('message', 'Nieznany błąd')}")
     
-    def get_server_status(self) -> dict:
-        """Pobierz status serwera (do debugowania)."""
-        response = self._send_request("STATUS")
-        return response.get("server_status", {})
+    def get_server_status(self) -> Dict[str, Any]:
+        """Pobranie stanu serwera (do debugowania)"""
+        response = self._send_request('GET_STATUS')
+        return response
     
-    def close(self):
-        """Zamknij połączenie z serwerem."""
-        if self.has_mutex:
-            logger.warning("Zamykam połączenie ale nadal mam mutex - wywoływam exit()")
+    @contextmanager
+    def synchronized(self):
+        """
+        Context manager dla transparentnego użycia monitora.
+        
+        Użycie:
+            with monitor.synchronized():
+                # sekcja krytyczna
+                while not ready:
+                    monitor.wait("condition")
+                monitor.signal("other_condition")
+        """
+        self.enter()
+        try:
+            yield
+        finally:
             self.exit()
-        
-        self.socket.close()
-        self.context.term()
-        logger.info("Połączenie zamknięte")
     
     def __enter__(self):
-        """Context manager support."""
+        """Support for 'with' statement"""
         self.enter()
         return self
     
     def __exit__(self, exc_type, exc_val, exc_tb):
-        """Context manager support."""
+        """Support for 'with' statement"""
         self.exit()
+    
+    def __del__(self):
+        """Cleanup przy niszczeniu obiektu"""
+        try:
+            self.disconnect()
+        except:
+            pass
 
 # Przykład użycia
-if __name__ == "__main__":
-    # Test podstawowy
-    print("=== Test Monitor Client ===")
+def example_usage():
+    """Demonstracja użycia DistributedMonitor"""
     
-    monitor = MonitorClient("tcp://localhost:5555")
+    monitor = DistributedMonitor("tcp://localhost:5555")
     
     try:
-        print("1. Wchodzę do monitora...")
-        if monitor.enter(timeout=5.0):
-            print("   ✓ Mam mutex")
-            
-            print("2. Testuję signal (nikt nie czeka)...")
-            monitor.signal("test_condition")
-            
-            print("3. Wychodzę z monitora...")
+        # Sposób 1: Explicit enter/exit
+        monitor.enter()
+        try:
+            print("W sekcji krytycznej")
+            time.sleep(1)
+            # monitor.wait("some_condition")  # Przykład wait
+            # monitor.signal("other_condition")  # Przykład signal
+        finally:
             monitor.exit()
-            print("   ✓ Mutex zwolniony")
-        else:
-            print("   ✗ Timeout podczas enter()")
-    
-    except Exception as e:
-        print(f"Błąd: {e}")
+        
+        # Sposób 2: Context manager
+        with monitor.synchronized():
+            print("W sekcji krytycznej (context manager)")
+            time.sleep(1)
+        
+        # Sposób 3: With statement
+        with monitor:
+            print("W sekcji krytycznej (with statement)")
+            time.sleep(1)
+            
     finally:
-        monitor.close()
-    
-    print("\n=== Test Context Manager ===")
-    
-    # Test z context manager
-    try:
-        with MonitorClient("tcp://localhost:5555") as monitor:
-            print("Automatyczne enter() - mam mutex")
-            monitor.signal("context_test")
-        print("Automatyczne exit() - mutex zwolniony")
-    except Exception as e:
-        print(f"Błąd: {e}")
+        monitor.disconnect()
+
+if __name__ == "__main__":
+    example_usage()

@@ -1,19 +1,19 @@
 #!/usr/bin/env python3
 """
-Monitor Server - Etap 3
-Distributed Monitor with Condition Variables
+Monitor Server - Etap 3: Condition Variables
+Centralny serwer zarządzający distributed monitor z obsługą warunków.
 
-Serwer zarządza:
-- Mutex (mutual exclusion)
-- Kolejkami warunków (condition queues)
-- Stanem oczekujących procesów
+Architektura:
+- Mutex: kontrola dostępu do sekcji krytycznej
+- Condition Variables: kolejki procesów oczekujących na warunki
+- Centralized Control: wszystkie decyzje podejmowane przez serwer
 
-Protokół:
-- ENTER_MONITOR -> GRANTED/DENIED
-- EXIT_MONITOR -> OK
-- WAIT_CONDITION -> OK (zwalnia mutex, czeka)
-- SIGNAL_CONDITION -> OK (budzi jeden proces)
-- BROADCAST_CONDITION -> OK (budzi wszystkie procesy)
+Protokół komunikacyjny:
+- ENTER_MONITOR: żądanie wejścia do monitora
+- EXIT_MONITOR: żądanie wyjścia z monitora  
+- WAIT_CONDITION: oczekiwanie na warunek (zwalnia mutex)
+- SIGNAL_CONDITION: sygnalizacja warunku (budzi jeden proces)
+- BROADCAST_CONDITION: broadcast warunku (budzi wszystkie procesy)
 """
 
 import zmq
@@ -21,282 +21,297 @@ import json
 import time
 import threading
 from collections import defaultdict, deque
-from typing import Dict, Set, Optional
+from dataclasses import dataclass
+from typing import Dict, Set, Optional, Any
 import logging
 
 # Konfiguracja logowania
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s'
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
-logger = logging.getLogger(__name__)
+logger = logging.getLogger('MonitorServer')
+
+@dataclass
+class ClientState:
+    """Stan klienta w systemie"""
+    client_id: str
+    has_mutex: bool = False
+    waiting_condition: Optional[str] = None
+    last_activity: float = 0.0
 
 class MonitorServer:
     """
-    Centralny serwer monitora zarządzający dostępem i synchronizacją.
+    Centralny serwer monitora rozproszonego.
     
-    Stan serwera:
-    - mutex_owner: ID procesu który obecnie ma mutex (None = wolny)
-    - mutex_queue: kolejka procesów czekających na mutex
-    - condition_queues: mapa {condition_name -> kolejka_procesów}
-    - waiting_processes: procesy które wykonały wait() i czekają na signal
+    Zarządza:
+    - mutex_owner: kto aktualnie ma dostęp do sekcji krytycznej
+    - mutex_queue: kolejka procesów oczekujących na mutex
+    - condition_queues: kolejki procesów oczekujących na konkretne warunki
+    - clients: stan wszystkich aktywnych klientów
     """
     
     def __init__(self, port: int = 5555):
         self.port = port
         
-        # Stan mutex - kto ma dostęp
+        # Mutex management
         self.mutex_owner: Optional[str] = None
-        self.mutex_queue: deque = deque()  # kolejka czekających na mutex
+        self.mutex_queue: deque = deque()  # Kolejka FIFO dla mutex
         
-        # Kolejki warunków - {condition_name: [process_id, ...]}
+        # Condition variables management
         self.condition_queues: Dict[str, deque] = defaultdict(deque)
         
-        # Procesy czekające na warunki (wykonały wait)
-        self.waiting_processes: Set[str] = set()
+        # Client tracking
+        self.clients: Dict[str, ClientState] = {}
         
-        # ØMQ setup
+        # Threading
+        self.lock = threading.Lock()  # Ochrona stanu serwera
+        self.running = False
+        
+        # ZMQ setup
         self.context = zmq.Context()
         self.socket = self.context.socket(zmq.REP)
-        self.socket.bind(f"tcp://*:{port}")
         
-        # Synchronizacja dostępu do stanu serwera
-        self.lock = threading.Lock()
-        
-        logger.info(f"Monitor Server uruchomiony na porcie {port}")
-    
-    def handle_enter_monitor(self, process_id: str) -> dict:
-        """
-        Żądanie wejścia do monitora.
-        
-        Logika:
-        - Jeśli mutex wolny -> przydziel i GRANTED
-        - Jeśli zajęty -> dodaj do kolejki i DENIED
-        """
-        with self.lock:
-            if self.mutex_owner is None:
-                # Mutex wolny - przydziel
-                self.mutex_owner = process_id
-                logger.info(f"ENTER: {process_id} otrzymał mutex")
-                return {"status": "GRANTED"}
-            else:
-                # Mutex zajęty - dodaj do kolejki
-                if process_id not in self.mutex_queue:
-                    self.mutex_queue.append(process_id)
-                logger.info(f"ENTER: {process_id} czeka w kolejce (pozycja {len(self.mutex_queue)})")
-                return {"status": "DENIED", "queue_position": len(self.mutex_queue)}
-    
-    def handle_exit_monitor(self, process_id: str) -> dict:
-        """
-        Żądanie wyjścia z monitora.
-        
-        Logika:
-        - Sprawdź czy proces rzeczywiście ma mutex
-        - Zwolnij mutex
-        - Przydziel następnemu w kolejce
-        """
-        with self.lock:
-            if self.mutex_owner != process_id:
-                logger.warning(f"EXIT: {process_id} próbuje zwolnić mutex nie będąc właścicielem")
-                return {"status": "ERROR", "message": "Nie masz mutex"}
-            
-            # Zwolnij mutex
-            self.mutex_owner = None
-            logger.info(f"EXIT: {process_id} zwolnił mutex")
-            
-            # Przydziel następnemu w kolejce
-            self._try_grant_mutex()
-            
-            return {"status": "OK"}
-    
-    def handle_wait_condition(self, process_id: str, condition: str) -> dict:
-        """
-        Proces czeka na warunek.
-        
-        Logika:
-        - Sprawdź czy proces ma mutex
-        - Dodaj proces do kolejki warunku
-        - Zwolnij mutex
-        - Przydziel mutex następnemu
-        - Proces będzie czekał na signal
-        """
-        with self.lock:
-            if self.mutex_owner != process_id:
-                logger.warning(f"WAIT: {process_id} próbuje wait bez mutex")
-                return {"status": "ERROR", "message": "Musisz mieć mutex żeby wait"}
-            
-            # Dodaj do kolejki warunku
-            self.condition_queues[condition].append(process_id)
-            self.waiting_processes.add(process_id)
-            
-            # Zwolnij mutex
-            self.mutex_owner = None
-            logger.info(f"WAIT: {process_id} czeka na '{condition}', zwolnił mutex")
-            
-            # Przydziel mutex następnemu
-            self._try_grant_mutex()
-            
-            return {"status": "OK", "message": f"Czekasz na '{condition}'"}
-    
-    def handle_signal_condition(self, process_id: str, condition: str) -> dict:
-        """
-        Sygnalizuj warunek - obudź jeden proces.
-        
-        Logika:
-        - Sprawdź czy proces ma mutex
-        - Znajdź pierwszy proces czekający na ten warunek
-        - Przenieś go z condition_queue do mutex_queue
-        """
-        with self.lock:
-            if self.mutex_owner != process_id:
-                logger.warning(f"SIGNAL: {process_id} próbuje signal bez mutex")
-                return {"status": "ERROR", "message": "Musisz mieć mutex żeby signal"}
-            
-            # Sprawdź czy ktoś czeka na ten warunek
-            if not self.condition_queues[condition]:
-                logger.info(f"SIGNAL: {process_id} sygnalizuje '{condition}' - nikt nie czeka")
-                return {"status": "OK", "message": f"Nikt nie czeka na '{condition}'"}
-            
-            # Obudź pierwszy proces z kolejki
-            waiting_process = self.condition_queues[condition].popleft()
-            self.waiting_processes.discard(waiting_process)
-            
-            # Dodaj go do kolejki mutex (na początek - ma priorytet)
-            self.mutex_queue.appendleft(waiting_process)
-            
-            logger.info(f"SIGNAL: {process_id} obudził {waiting_process} z '{condition}'")
-            return {"status": "OK", "message": f"Obudził {waiting_process}"}
-    
-    def handle_broadcast_condition(self, process_id: str, condition: str) -> dict:
-        """
-        Broadcast warunek - obudź wszystkie procesy.
-        
-        Logika:
-        - Sprawdź czy proces ma mutex
-        - Wszystkie procesy z condition_queue przenieś do mutex_queue
-        """
-        with self.lock:
-            if self.mutex_owner != process_id:
-                logger.warning(f"BROADCAST: {process_id} próbuje broadcast bez mutex")
-                return {"status": "ERROR", "message": "Musisz mieć mutex żeby broadcast"}
-            
-            # Sprawdź czy ktoś czeka
-            if not self.condition_queues[condition]:
-                logger.info(f"BROADCAST: {process_id} broadcast '{condition}' - nikt nie czeka")
-                return {"status": "OK", "message": f"Nikt nie czeka na '{condition}'"}
-            
-            # Obudź wszystkie procesy
-            awakened = []
-            while self.condition_queues[condition]:
-                waiting_process = self.condition_queues[condition].popleft()
-                self.waiting_processes.discard(waiting_process)
-                self.mutex_queue.appendleft(waiting_process)  # priorytet
-                awakened.append(waiting_process)
-            
-            logger.info(f"BROADCAST: {process_id} obudził {len(awakened)} procesów z '{condition}'")
-            return {"status": "OK", "message": f"Obudził {len(awakened)} procesów"}
-    
-    def _try_grant_mutex(self):
-        """
-        Pomocnicza: spróbuj przydzielić mutex następnemu w kolejce.
-        UWAGA: Wywołać tylko gdy self.lock jest trzymany!
-        """
-        if self.mutex_owner is None and self.mutex_queue:
-            next_process = self.mutex_queue.popleft()
-            self.mutex_owner = next_process
-            logger.info(f"GRANT: {next_process} otrzymał mutex z kolejki")
-    
-    def get_status(self) -> dict:
-        """Status serwera dla debugowania."""
-        with self.lock:
-            return {
-                "mutex_owner": self.mutex_owner,
-                "mutex_queue": list(self.mutex_queue),
-                "condition_queues": {k: list(v) for k, v in self.condition_queues.items()},
-                "waiting_processes": list(self.waiting_processes)
-            }
-    
-    def handle_request(self, request: dict) -> dict:
-        """
-        Główna funkcja obsługi żądań.
-        
-        Protokół:
-        {
-            "action": "ENTER_MONITOR" | "EXIT_MONITOR" | "WAIT_CONDITION" | "SIGNAL_CONDITION" | "BROADCAST_CONDITION" | "STATUS",
-            "process_id": "client_123",
-            "condition": "condition_name"  # tylko dla wait/signal/broadcast
-        }
-        """
-        action = request.get("action")
-        process_id = request.get("process_id")
-        condition = request.get("condition")
-        
-        logger.debug(f"Request: {action} from {process_id}")
+    def start(self):
+        """Uruchomienie serwera"""
+        self.socket.bind(f"tcp://*:{self.port}")
+        self.running = True
+        logger.info(f"Monitor Server uruchomiony na porcie {self.port}")
         
         try:
-            if action == "ENTER_MONITOR":
-                return self.handle_enter_monitor(process_id)
-            elif action == "EXIT_MONITOR":
-                return self.handle_exit_monitor(process_id)
-            elif action == "WAIT_CONDITION":
-                return self.handle_wait_condition(process_id, condition)
-            elif action == "SIGNAL_CONDITION":
-                return self.handle_signal_condition(process_id, condition)
-            elif action == "BROADCAST_CONDITION":
-                return self.handle_broadcast_condition(process_id, condition)
-            elif action == "STATUS":
-                return {"status": "OK", "server_status": self.get_status()}
-            else:
-                return {"status": "ERROR", "message": f"Nieznana akcja: {action}"}
-        
-        except Exception as e:
-            logger.error(f"Błąd obsługi żądania {action}: {e}")
-            return {"status": "ERROR", "message": str(e)}
-    
-    def run(self):
-        """Główna pętla serwera."""
-        logger.info("Monitor Server rozpoczyna obsługę żądań...")
-        
-        try:
-            while True:
-                # Odbierz żądanie (blokujące)
-                message = self.socket.recv_string()
-                logger.debug(f"Otrzymano: {message}")
-                
-                # Parsuj JSON
-                try:
-                    request = json.loads(message)
-                except json.JSONDecodeError:
-                    response = {"status": "ERROR", "message": "Nieprawidłowy JSON"}
-                else:
-                    response = self.handle_request(request)
-                
-                # Wyślij odpowiedź
-                response_json = json.dumps(response)
-                self.socket.send_string(response_json)
-                logger.debug(f"Wysłano: {response_json}")
-        
+            while self.running:
+                # Oczekiwanie na żądanie (timeout 1s dla graceful shutdown)
+                if self.socket.poll(1000):
+                    message = self.socket.recv_json()
+                    response = self._handle_request(message)
+                    self.socket.send_json(response)
+                    
         except KeyboardInterrupt:
-            logger.info("Serwer zatrzymany przez użytkownika")
-        except Exception as e:
-            logger.error(f"Błąd serwera: {e}")
+            logger.info("Otrzymano sygnał przerwania")
         finally:
-            self.socket.close()
-            self.context.term()
+            self.stop()
+    
+    def stop(self):
+        """Zatrzymanie serwera"""
+        self.running = False
+        self.socket.close()
+        self.context.term()
+        logger.info("Monitor Server zatrzymany")
+    
+    def _handle_request(self, message: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Obsługa żądań od klientów.
+        Wszystkie operacje są atomowe dzięki self.lock.
+        """
+        with self.lock:
+            try:
+                action = message.get('action')
+                client_id = message.get('client_id')
+                
+                # Aktualizacja czasu aktywności klienta
+                if client_id:
+                    if client_id not in self.clients:
+                        self.clients[client_id] = ClientState(client_id)
+                    self.clients[client_id].last_activity = time.time()
+                
+                # Routing żądań
+                if action == 'ENTER_MONITOR':
+                    return self._handle_enter_monitor(client_id)
+                elif action == 'EXIT_MONITOR':
+                    return self._handle_exit_monitor(client_id)
+                elif action == 'WAIT_CONDITION':
+                    condition = message.get('condition')
+                    return self._handle_wait_condition(client_id, condition)
+                elif action == 'SIGNAL_CONDITION':
+                    condition = message.get('condition')
+                    return self._handle_signal_condition(client_id, condition)
+                elif action == 'BROADCAST_CONDITION':
+                    condition = message.get('condition')
+                    return self._handle_broadcast_condition(client_id, condition)
+                elif action == 'GET_STATUS':
+                    return self._handle_get_status()
+                else:
+                    return {'status': 'ERROR', 'message': f'Nieznana akcja: {action}'}
+                    
+            except Exception as e:
+                logger.error(f"Błąd obsługi żądania: {e}")
+                return {'status': 'ERROR', 'message': str(e)}
+    
+    def _handle_enter_monitor(self, client_id: str) -> Dict[str, Any]:
+        """
+        Obsługa wejścia do monitora.
+        
+        Logika:
+        1. Jeśli mutex jest wolny -> przyznaj natychmiast
+        2. Jeśli mutex zajęty -> dodaj do kolejki
+        """
+        logger.info(f"Klient {client_id} żąda wejścia do monitora")
+        
+        if self.mutex_owner is None:
+            # Mutex wolny - przyznaj natychmiast
+            self.mutex_owner = client_id
+            self.clients[client_id].has_mutex = True
+            logger.info(f"Mutex przyznany klientowi {client_id}")
+            return {'status': 'GRANTED'}
+        else:
+            # Mutex zajęty - dodaj do kolejki
+            if client_id not in self.mutex_queue:
+                self.mutex_queue.append(client_id)
+                logger.info(f"Klient {client_id} dodany do kolejki mutex (pozycja {len(self.mutex_queue)})")
+            return {'status': 'QUEUED', 'position': len(self.mutex_queue)}
+    
+    def _handle_exit_monitor(self, client_id: str) -> Dict[str, Any]:
+        """
+        Obsługa wyjścia z monitora.
+        
+        Logika:
+        1. Sprawdź czy klient rzeczywiście ma mutex
+        2. Zwolnij mutex
+        3. Przyznaj mutex następnemu w kolejce (jeśli istnieje)
+        """
+        logger.info(f"Klient {client_id} wychodzi z monitora")
+        
+        if self.mutex_owner != client_id:
+            return {'status': 'ERROR', 'message': 'Nie masz mutex - nie możesz wyjść'}
+        
+        # Zwolnij mutex
+        self.mutex_owner = None
+        self.clients[client_id].has_mutex = False
+        
+        # Przyznaj mutex następnemu w kolejce
+        next_client = self._grant_mutex_to_next()
+        
+        if next_client:
+            logger.info(f"Mutex przekazany do klienta {next_client}")
+            return {'status': 'RELEASED', 'next_owner': next_client}
+        else:
+            logger.info("Mutex zwolniony, brak oczekujących")
+            return {'status': 'RELEASED'}
+    
+    def _handle_wait_condition(self, client_id: str, condition: str) -> Dict[str, Any]:
+        """
+        Obsługa oczekiwania na warunek.
+        
+        Kluczowa semantyka monitora:
+        1. Klient MUSI mieć mutex żeby wykonać wait
+        2. Wait ZWALNIA mutex i dodaje klienta do kolejki warunku
+        3. Mutex zostaje przyznany następnemu w kolejce
+        """
+        logger.info(f"Klient {client_id} czeka na warunek '{condition}'")
+        
+        if self.mutex_owner != client_id:
+            return {'status': 'ERROR', 'message': 'Musisz mieć mutex żeby wykonać wait'}
+        
+        # Zwolnij mutex
+        self.mutex_owner = None
+        self.clients[client_id].has_mutex = False
+        self.clients[client_id].waiting_condition = condition
+        
+        # Dodaj do kolejki warunku
+        self.condition_queues[condition].append(client_id)
+        
+        # Przyznaj mutex następnemu w kolejce
+        next_client = self._grant_mutex_to_next()
+        
+        logger.info(f"Klient {client_id} oczekuje na '{condition}', mutex przekazany do {next_client}")
+        return {'status': 'WAITING', 'condition': condition}
+    
+    def _handle_signal_condition(self, client_id: str, condition: str) -> Dict[str, Any]:
+        """
+        Obsługa sygnalizacji warunku (budzi JEDEN proces).
+        
+        Logika:
+        1. Tylko właściciel mutex może sygnalizować
+        2. Budzi pierwszy proces z kolejki warunku
+        3. Obudzony proces trafia do kolejki mutex
+        """
+        logger.info(f"Klient {client_id} sygnalizuje warunek '{condition}'")
+        
+        if self.mutex_owner != client_id:
+            return {'status': 'ERROR', 'message': 'Musisz mieć mutex żeby sygnalizować'}
+        
+        # Sprawdź czy ktoś oczekuje na ten warunek
+        if condition not in self.condition_queues or not self.condition_queues[condition]:
+            logger.info(f"Brak procesów oczekujących na warunek '{condition}'")
+            return {'status': 'SIGNALED', 'woken_processes': 0}
+        
+        # Obudź pierwszy proces z kolejki
+        woken_client = self.condition_queues[condition].popleft()
+        self.clients[woken_client].waiting_condition = None
+        
+        # Dodaj obudzonego klienta do kolejki mutex
+        self.mutex_queue.append(woken_client)
+        
+        logger.info(f"Klient {woken_client} obudzony z warunku '{condition}' i dodany do kolejki mutex")
+        return {'status': 'SIGNALED', 'woken_processes': 1, 'woken_client': woken_client}
+    
+    def _handle_broadcast_condition(self, client_id: str, condition: str) -> Dict[str, Any]:
+        """
+        Obsługa broadcast warunku (budzi WSZYSTKIE procesy).
+        
+        Logika:
+        1. Tylko właściciel mutex może broadcastować
+        2. Budzi wszystkie procesy z kolejki warunku
+        3. Wszystkie obudzone procesy trafiają do kolejki mutex
+        """
+        logger.info(f"Klient {client_id} broadcastuje warunek '{condition}'")
+        
+        if self.mutex_owner != client_id:
+            return {'status': 'ERROR', 'message': 'Musisz mieć mutex żeby broadcastować'}
+        
+        # Sprawdź czy ktoś oczekuje na ten warunek
+        if condition not in self.condition_queues or not self.condition_queues[condition]:
+            logger.info(f"Brak procesów oczekujących na warunek '{condition}'")
+            return {'status': 'BROADCASTED', 'woken_processes': 0}
+        
+        # Obudź wszystkie procesy z kolejki warunku
+        woken_clients = []
+        while self.condition_queues[condition]:
+            woken_client = self.condition_queues[condition].popleft()
+            self.clients[woken_client].waiting_condition = None
+            self.mutex_queue.append(woken_client)
+            woken_clients.append(woken_client)
+        
+        logger.info(f"Broadcast '{condition}': obudzono {len(woken_clients)} procesów")
+        return {'status': 'BROADCASTED', 'woken_processes': len(woken_clients), 'woken_clients': woken_clients}
+    
+    def _handle_get_status(self) -> Dict[str, Any]:
+        """Zwraca aktualny stan serwera (do debugowania)"""
+        return {
+            'status': 'OK',
+            'mutex_owner': self.mutex_owner,
+            'mutex_queue': list(self.mutex_queue),
+            'condition_queues': {k: list(v) for k, v in self.condition_queues.items()},
+            'active_clients': len(self.clients)
+        }
+    
+    def _grant_mutex_to_next(self) -> Optional[str]:
+        """
+        Przyznaje mutex następnemu klientowi w kolejce.
+        Zwraca ID klienta lub None jeśli kolejka pusta.
+        """
+        if self.mutex_queue:
+            next_client = self.mutex_queue.popleft()
+            self.mutex_owner = next_client
+            self.clients[next_client].has_mutex = True
+            return next_client
+        return None
+
+def main():
+    """Uruchomienie serwera"""
+    import argparse
+    
+    parser = argparse.ArgumentParser(description='Monitor Server - Etap 3')
+    parser.add_argument('--port', type=int, default=5555, help='Port serwera')
+    args = parser.parse_args()
+    
+    server = MonitorServer(args.port)
+    
+    try:
+        server.start()
+    except KeyboardInterrupt:
+        print("\nZatrzymywanie serwera...")
+        server.stop()
 
 if __name__ == "__main__":
-    server = MonitorServer(port=5555)
-    
-    # Wyświetl status co 10 sekund (opcjonalnie)
-    def print_status():
-        while True:
-            time.sleep(10)
-            status = server.get_status()
-            if any([status["mutex_owner"], status["mutex_queue"], status["condition_queues"]]):
-                logger.info(f"Status: {status}")
-    
-    status_thread = threading.Thread(target=print_status, daemon=True)
-    status_thread.start()
-    
-    # Uruchom serwer
-    server.run()
+    main()
