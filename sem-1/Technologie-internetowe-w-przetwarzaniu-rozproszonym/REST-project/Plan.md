@@ -1,9 +1,14 @@
-# Uproszczony Plan REST API - System Biblioteki
+# Maksymalnie Uproszczony Plan REST API - System Biblioteki
 
 ## 1. Koncepcja
-**System zarządzania biblioteką** - uproszczony do minimum wymaganego przez zadanie.
+**System zarządzania biblioteką** - implementacja w pamięci bez bazy danych.
 
-## 2. Hierarchia Zasobów
+## 2. Technologia
+- **Backend**: Python + Flask (pojedynczy plik)
+- **Dane**: Słowniki Python w pamięci
+- **Serwer**: Flask development server
+
+## 3. Hierarchia Zasobów
 
 ```
 /api/v1/
@@ -12,66 +17,181 @@
 ├── /books                     # Kolekcja książek (stronicowanie)
 ├── /books/{id}                # Pojedyncza książka (Lost Update - ETag)
 ├── /orders                    # Zlecenia (POST once exactly)
-└── /batch/bulk-update         # Kontroler (aktualizacja wielu książek)
+└── /bulk-update               # Kontroler (aktualizacja wielu książek)
 ```
 
-## 3. Implementacja Wymagań
+## 4. Struktura Danych w Pamięci
 
-### 3.1 CRUD - Autorzy
-- **Zasób**: `/authors/{id}`
-- **Operacje**: GET, POST (na kolekcji), PUT, DELETE
+```python
+# Globalne słowniki
+authors = {}
+books = {}
+orders = {}
+idempotency_keys = {}  # TTL: restart aplikacji
+etags = {}             # Wersjonowanie
+```
 
-### 3.2 Kolekcja ze stronicowaniem - Książki
-- **Zasób**: `/books`
-- **Parametry**: `?page=1&limit=10&sort=title`
+## 5. Implementacja Wymagań
 
-### 3.3 Lost Update Problem - Książki
-- **Zasób**: `/books/{id}`
-- **Mechanizm**: ETag w nagłówku `If-Match`
-
-### 3.4 POST once exactly - Zlecenia
-- **Zasób**: `/orders`
-- **Mechanizm**: `Idempotency-Key` w nagłówku
-
-### 3.5 Kontroler - Batch Update
-- **Zasób**: `/batch/bulk-update`
-- **Funkcja**: Atomowa aktualizacja wielu książek
-
-## 4. Formaty Danych
-
-### Autor
-```json
-{
-  "id": "auth123",
-  "name": "J.R.R. Tolkien",
-  "birthYear": 1892,
-  "etag": "abc123"
+### 5.1 CRUD - Autorzy (w pamięci)
+```python
+authors = {
+    "1": {"id": "1", "name": "Tolkien", "etag": "v1"},
+    "2": {"id": "2", "name": "Sapkowski", "etag": "v1"}
 }
 ```
 
-### Książka
-```json
-{
-  "id": "book123",
-  "title": "Hobbit",
-  "authorId": "auth123",
-  "copies": 5,
-  "available": 3,
-  "etag": "def456"
-}
+### 5.2 Kolekcja ze stronicowaniem - Książki
+```python
+# Stronicowanie przez slice()
+def paginate(data, page, limit):
+    start = (page - 1) * limit
+    end = start + limit
+    return list(data.values())[start:end]
 ```
 
-### Zlecenie
-```json
-{
-  "id": "order123",
-  "bookId": "book123",
-  "action": "reserve",
-  "timestamp": "2025-06-11T10:00:00Z"
-}
+### 5.3 Lost Update Problem - ETag
+```python
+# Generator ETag
+import hashlib
+def generate_etag(data):
+    return hashlib.md5(str(data).encode()).hexdigest()[:8]
 ```
 
-## 5. Dokumentacja Usługi
+### 5.4 POST once exactly - Idempotency Key
+```python
+idempotency_keys = {}  # {key: response}
+```
+
+### 5.5 Kontroler - Bulk Update
+```python
+def bulk_update(book_ids, updates):
+    # Atomowa aktualizacja w pamięci
+    for book_id in book_ids:
+        if book_id in books:
+            books[book_id].update(updates)
+```
+
+## 6. Przykładowa Implementacja (app.py)
+
+```python
+from flask import Flask, request, jsonify
+import hashlib
+import uuid
+
+app = Flask(__name__)
+
+# Dane w pamięci
+authors = {}
+books = {}
+orders = {}
+idempotency_keys = {}
+
+def generate_etag(data):
+    return hashlib.md5(str(data).encode()).hexdigest()[:8]
+
+# CRUD - Autorzy
+@app.route('/authors', methods=['GET', 'POST'])
+def authors_collection():
+    if request.method == 'GET':
+        return jsonify(list(authors.values()))
+    else:  # POST
+        data = request.json
+        author_id = str(uuid.uuid4())
+        author = {**data, "id": author_id, "etag": generate_etag(data)}
+        authors[author_id] = author
+        return jsonify(author), 201
+
+@app.route('/authors/<id>', methods=['GET', 'PUT', 'DELETE'])
+def author_resource(id):
+    if id not in authors:
+        return '', 404
+    
+    if request.method == 'GET':
+        return jsonify(authors[id])
+    elif request.method == 'PUT':
+        data = request.json
+        authors[id] = {**data, "id": id, "etag": generate_etag(data)}
+        return jsonify(authors[id])
+    else:  # DELETE
+        del authors[id]
+        return '', 204
+
+# Stronicowanie - Książki
+@app.route('/books', methods=['GET'])
+def books_collection():
+    page = int(request.args.get('page', 1))
+    limit = int(request.args.get('limit', 10))
+    
+    all_books = list(books.values())
+    start = (page - 1) * limit
+    end = start + limit
+    
+    return jsonify({
+        "data": all_books[start:end],
+        "page": page,
+        "limit": limit,
+        "total": len(all_books)
+    })
+
+# Lost Update - ETag
+@app.route('/books/<id>', methods=['PUT'])
+def book_update(id):
+    if id not in books:
+        return '', 404
+    
+    if_match = request.headers.get('If-Match')
+    if if_match != books[id]['etag']:
+        return '', 412  # Precondition Failed
+    
+    data = request.json
+    books[id] = {**data, "id": id, "etag": generate_etag(data)}
+    return jsonify(books[id])
+
+# POST once exactly - Idempotency
+@app.route('/orders', methods=['POST'])
+def create_order():
+    idempotency_key = request.headers.get('Idempotency-Key')
+    
+    if idempotency_key in idempotency_keys:
+        return idempotency_keys[idempotency_key]
+    
+    data = request.json
+    order_id = str(uuid.uuid4())
+    order = {**data, "id": order_id}
+    orders[order_id] = order
+    
+    response = jsonify(order), 201
+    if idempotency_key:
+        idempotency_keys[idempotency_key] = response
+    
+    return response
+
+# Kontroler - Bulk Update
+@app.route('/bulk-update', methods=['POST'])
+def bulk_update():
+    data = request.json
+    book_ids = data.get('bookIds', [])
+    updates = data.get('updates', {})
+    
+    updated = []
+    for book_id in book_ids:
+        if book_id in books:
+            books[book_id].update(updates)
+            books[book_id]['etag'] = generate_etag(books[book_id])
+            updated.append(books[book_id])
+    
+    return jsonify({"updated": updated})
+
+if __name__ == '__main__':
+    # Przykładowe dane
+    books["1"] = {"id": "1", "title": "Hobbit", "copies": 5, "etag": "v1"}
+    books["2"] = {"id": "2", "title": "LOTR", "copies": 3, "etag": "v1"}
+    
+    app.run(debug=True)
+```
+
+## 7. Dokumentacja Usługi
 
 | URI | GET | POST | PUT | PATCH | DELETE |
 |-----|-----|------|-----|-------|--------|
@@ -82,50 +202,33 @@
 | /orders | lista zleceń | utwórz zlecenie (idempotent) | X | X | X |
 | /batch/bulk-update | X | aktualizuj wiele książek | X | X | X |
 
-## 6. Kluczowe Mechanizmy
+## 8. Uruchomienie
 
-### ETag (Lost Update Prevention)
-```http
-PUT /books/123
-If-Match: "etag-value"
+```bash
+pip install flask
+python app.py
+# Serwer na http://localhost:5000
 ```
 
-### Idempotency Key
-```http
-POST /orders
-Idempotency-Key: "unique-key-123"
+## 9. Testowanie w Postman
+
+```bash
+# CRUD - Autor
+POST /authors {"name": "Tolkien"}
+GET /authors/1
+PUT /authors/1 {"name": "J.R.R. Tolkien"}
+DELETE /authors/1
+
+# Stronicowanie
+GET /books?page=1&limit=2
+
+# Lost Update
+GET /books/1  # Pobierz ETag
+PUT /books/1 + Header: If-Match: "v1"
+
+# Idempotency
+POST /orders + Header: Idempotency-Key: "key123"
+
+# Bulk Update
+POST /bulk-update {"bookIds": ["1","2"], "updates": {"copies": 10}}
 ```
-
-### Stronicowanie
-```http
-GET /books?page=2&limit=5
-```
-
-### Batch Operation
-```http
-POST /batch/bulk-update
-{
-  "bookIds": ["book1", "book2"],
-  "updates": {"available": 0}
-}
-```
-
-## 7. Plan Implementacji
-
-1. **Setup** - FastAPI + MongoDB
-2. **Modele** - Author, Book, Order
-3. **CRUD** - Podstawowe operacje
-4. **Stronicowanie** - Dla kolekcji książek
-5. **ETag** - Dla aktualizacji książek
-6. **Idempotency** - Dla zleceń
-7. **Batch** - Kontroler bulk-update
-8. **Testy** - Postman Collection
-
-## 8. Prezentacja
-
-**Scenariusz demonstracji:**
-1. CRUD na autorach
-2. Stronicowanie książek
-3. Test ETag (Lost Update)
-4. Test Idempotency
-5. Batch operation
