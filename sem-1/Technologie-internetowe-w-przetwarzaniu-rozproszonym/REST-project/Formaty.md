@@ -9,7 +9,7 @@ Znaczenie: Pobiera listę wszystkich autorów.
 Dane wejściowe: Brak.
 Format wyjściowy: Obiekt JSON zawierający listę autorów oraz ich łączną liczbę.
 JSON
-'''
+```
 {
   "data": [
     {
@@ -24,18 +24,18 @@ JSON
   ],
   "total": 1
 }
-'''
+```
 POST /api/v1/authors
 Znaczenie: Tworzy nowego autora w systemie.
 Dane wejściowe: Obiekt JSON z danymi autora. Pole name jest wymagane. Pola bio i birth_year są opcjonalne.
 JSON
-'''
+```
 {
   "name": "George Orwell",
   "bio": "English novelist, essayist, journalist and critic.",
   "birth_year": 1903
 }
-'''
+```
 Format wyjściowy: Pełny obiekt nowo utworzonego autora, zawierający pola wygenerowane przez serwer (id, created_at, updated_at, etag).
 Zasób: /authors/{id}
 Reprezentuje pojedynczego autora, identyfikowanego przez jego unikalny identyfikator.
@@ -64,7 +64,7 @@ Znaczenie: Pobiera listę książek z obsługą stronicowania.
 Dane wejściowe: Opcjonalne parametry zapytania ?page= (numer strony) i ?limit= (liczba wyników na stronę).
 Format wyjściowy: Obiekt JSON zawierający listę książek (data) oraz metadane stronicowania (pagination).
 JSON
-'''
+```
 {
   "data": [
     {
@@ -86,7 +86,7 @@ JSON
     "has_previous": false
   }
 }
-'''
+```
 POST /api/v1/books
 Znaczenie: Tworzy nową książkę w systemie. Wymaga istnienia autora o podanym author_id.
 Dane wejściowe: Obiekt JSON z danymi książki. Wymagane pola to title i author_id. Opcjonalne to m.in. copies, isbn, publication_year.
@@ -124,12 +124,12 @@ JSON
 
 // Nagłówek: Idempotency-Key: "unikalny-klucz-12345"
 // Ciało:
-'''
+```
 {
   "bookId": "1",
   "quantity": 2
 }
-'''
+```
 Format wyjściowy: Obiekt nowo utworzonego zlecenia. W przypadku duplikatu zwracana jest pierwotna odpowiedź.
 Zasób: /bulk-update
 Zasób typu kontroler, umożliwiający wykonanie operacji na wielu innych zasobach atomowo.
@@ -138,7 +138,7 @@ POST /api/v1/bulk-update
 Znaczenie: Zbiorcza aktualizacja wielu książek w ramach jednej operacji.
 Dane wejściowe: Obiekt JSON zawierający listę identyfikatorów książek (bookIds) oraz słownik ze zmianami do wprowadzenia (updates).
 JSON
-'''
+```
 {
   "bookIds": ["1", "2", "999"],
   "updates": {
@@ -146,5 +146,5 @@ JSON
     "status": "out_of_stock"
   }
 }
-'''
+```
 Format wyjściowy: Obiekt JSON z podsumowaniem operacji, zawierający listę zaktualizowanych książek (updated) oraz listę ID, których nie znaleziono (notFound).
