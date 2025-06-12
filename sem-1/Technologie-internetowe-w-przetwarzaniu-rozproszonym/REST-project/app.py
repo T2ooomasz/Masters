@@ -657,7 +657,7 @@ if __name__ == '__main__':
     initialize_sample_data()
     
     print("=== Library Management System - Authors CRUD + Books Collection ===")
-    print("Available endpoints:")
+    print("Available endpoints examples:")
     print("Authors CRUD:")
     print("  GET    /api/v1/authors          - List all authors")
     print("  POST   /api/v1/authors          - Create new author")
