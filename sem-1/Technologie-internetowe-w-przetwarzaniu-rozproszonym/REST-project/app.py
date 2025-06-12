@@ -610,6 +610,7 @@ def initialize_sample_data():
     
     # Tworzenie przykładowych książek
     sample_books = [
+        {"title": "My Random Book", "author_idx": 0, "copies": 5000, "isbn": "111-2223334445", "publication_year": 0000},
         {"title": "The Hobbit", "author_idx": 0, "copies": 5, "isbn": "978-0547928227", "publication_year": 1937},
         {"title": "The Fellowship of the Ring", "author_idx": 0, "copies": 3, "isbn": "978-0547928210", "publication_year": 1954},
         {"title": "The Two Towers", "author_idx": 0, "copies": 3, "isbn": "978-0547928203", "publication_year": 1954},
@@ -628,7 +629,10 @@ def initialize_sample_data():
     ]
     
     for book_data in sample_books:
-        book_id = str(uuid.uuid4())
+        if book["title"] == "My Random Book":
+            book_id = 1
+        else:
+            book_id = str(uuid.uuid4())
         book = {
             "id": book_id,
             "title": book_data['title'],
