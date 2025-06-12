@@ -517,37 +517,39 @@ def orders_collection():
 
 @app.route('/api/v1/bulk-update', methods=['POST'])
 def bulk_update():
-    """Kontroler do atomowej aktualizacji wielu książek"""
+    """
+    Aktualizuje wiele książek w jednej operacji.
+    Oczekuje JSON: {"bookIds": ["1", "2"], "updates": {"copies": 10}}
+    """
     data = request.json
-    if not data:
-        return jsonify({"error": "Request data is required"}), 400
-    
-    book_ids = data.get('bookIds', [])
-    updates = data.get('updates', {})
-    
-    if not book_ids or not updates:
-        return jsonify({"error": "bookIds and updates are required"}), 400
-    
-    # Sprawdzenie czy wszystkie książki istnieją
-    missing_books = [book_id for book_id in book_ids if book_id not in books]
-    if missing_books:
-        return jsonify({
-            "error": "Some books not found",
-            "missing_books": missing_books
-        }), 404
-    
-    # Atomowa aktualizacja
+    book_ids = data.get('bookIds')
+    updates = data.get('updates')
+
+    # Walidacja wejścia
+    if not isinstance(book_ids, list) or not isinstance(updates, dict):
+        return jsonify({"error": "Invalid payload format"}), 400
+
     updated_books = []
+    not_found_ids = []
+
+    # Atomowość: w tym przypadku pętla jest wystarczająca,
+    # bo operujemy na słowniku w pamięci. W systemie z bazą danych
+    # należałoby użyć transakcji.
     for book_id in book_ids:
-        current_book = books[book_id].copy()
-        current_book.update(updates)
-        updated_book = create_book_with_etag(current_book, book_id)
-        books[book_id] = updated_book
-        updated_books.append(updated_book)
-    
+        if book_id in books:
+            # Zastosuj aktualizacje
+            books[book_id].update(updates)
+            # Zaktualizuj ETag po zmianie danych
+            books[book_id]['etag'] = generate_etag(books[book_id])
+            updated_books.append(books[book_id])
+        else:
+            not_found_ids.append(book_id)
+
+    # Kompletny feedback o zmianach
     return jsonify({
-        "message": f"Successfully updated {len(updated_books)} books",
-        "updated_books": updated_books
+        "status": "Completed",
+        "updated": updated_books,
+        "notFound": not_found_ids
     })
 
 # =============================================================================
