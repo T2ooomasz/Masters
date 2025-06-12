@@ -629,8 +629,8 @@ def initialize_sample_data():
     ]
     
     for book_data in sample_books:
-        if book["title"] == "My Random Book":
-            book_id = 1
+        if book_data["title"] == "My Random Book":
+            book_id = str(1)
         else:
             book_id = str(uuid.uuid4())
         book = {
