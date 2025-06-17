@@ -6,7 +6,7 @@ from multiprocessing import Process, Barrier, Manager
 # UWAGA: Upewnij się, że pliki monitor_server.py i monitor_client.py
 # znajdują się w tym samym katalogu lub w ścieżce Pythona.
 from monitor_server import MonitorServer
-from monitor_client import DistributedMonitor
+from monitor_client import DistributedMonitor, MonitorError
 
 # Wyłączamy logowanie z modułów, aby nie zaśmiecać wyników testów
 logging.disable(logging.CRITICAL)
@@ -196,6 +196,122 @@ class TestConditionVariables(BaseMonitorTestCase):
         self.assertFalse(broadcaster.is_alive(), "Proces 'broadcaster' nie zakończył się.")
         for i, p in enumerate(waiters):
             self.assertFalse(p.is_alive(), f"Proces 'waiter {i+1}' nie zakończył się.")
+        print("ok")
+
+    def test_08_selective_signaling_multiple_conditions(self):
+        """Test: Selektywne budzenie procesów na różnych warunkach."""
+        print("\nTest: Selektywne budzenie na wielu warunkach...")
+
+        NUM_WAITERS_PER_CONDITION = 2
+        TOTAL_WAITERS = NUM_WAITERS_PER_CONDITION * 2
+        NUM_SIGNALERS = 2
+        
+        monitor_name_test = f"{self.MONITOR_NAME}_multi_cond_08"
+        condition_X_name = "cond_X_08"
+        condition_Y_name = "cond_Y_08"
+
+        manager = Manager()
+        completed_waiter_ids = manager.list()
+        signaler_reports = manager.list() # (signaler_id, woken_count)
+        # event_log = manager.list() # Opcjonalne, do debugowania
+
+        # Bariera dla wszystkich procesów biorących udział w teście
+        barrier = Barrier(TOTAL_WAITERS + NUM_SIGNALERS)
+
+        waiter_processes = []
+        waiter_ids_cond_X = [f"Waiter_X{i+1}" for i in range(NUM_WAITERS_PER_CONDITION)]
+        waiter_ids_cond_Y = [f"Waiter_Y{i+1}" for i in range(NUM_WAITERS_PER_CONDITION)]
+
+        def waiter_func(process_id_str, cond_name_to_wait, mon_name, srv_addr, barr, completed_list_proxy):
+            # print(f"{process_id_str}: Uruchamiam...")
+            monitor = DistributedMonitor(mon_name, srv_addr, poll_interval=0.05) # Krótszy poll dla testu
+            try:
+                barr.wait()
+                # print(f"{process_id_str}: Po barierze, wchodzę do monitora...")
+                with monitor:
+                    # print(f"{process_id_str}: W monitorze, czekam na {cond_name_to_wait}...")
+                    monitor.wait(cond_name_to_wait)
+                    # print(f"{process_id_str}: Obudzony z {cond_name_to_wait}, wykonuję pracę...")
+                    completed_list_proxy.append(process_id_str)
+                    time.sleep(0.1) # Symulacja pracy w sekcji krytycznej
+                    # print(f"{process_id_str}: Kończę pracę, wychodzę z monitora.")
+            except MonitorError as e:
+                print(f"Błąd w {process_id_str}: {e}") # Logowanie błędów z procesów potomnych
+            except Exception as e:
+                print(f"Nieoczekiwany błąd w {process_id_str}: {e}")
+            finally:
+                monitor.close()
+                # print(f"{process_id_str}: Zakończono.")
+
+
+        def signaler_func(signaler_id_str, cond_name_to_signal, mon_name, srv_addr, barr, reports_list_proxy, delay):
+            # print(f"{signaler_id_str}: Uruchamiam...")
+            monitor = DistributedMonitor(mon_name, srv_addr, poll_interval=0.05)
+            try:
+                barr.wait()
+                # print(f"{signaler_id_str}: Po barierze, czekam {delay}s przed sygnałem...")
+                time.sleep(delay) # Opóźnienie, aby kelnerzy zdążyli wejść w wait
+                # print(f"{signaler_id_str}: Wchodzę do monitora, aby zasygnalizować {cond_name_to_signal}...")
+                with monitor:
+                    # print(f"{signaler_id_str}: W monitorze, sygnalizuję {cond_name_to_signal}...")
+                    woken_count = monitor.signal(cond_name_to_signal)
+                    reports_list_proxy.append((signaler_id_str, woken_count))
+                    # print(f"{signaler_id_str}: Zasygnalizowano {cond_name_to_signal}, obudzono: {woken_count}. Wychodzę.")
+            except MonitorError as e:
+                print(f"Błąd w {signaler_id_str}: {e}")
+            except Exception as e:
+                print(f"Nieoczekiwany błąd w {signaler_id_str}: {e}")
+            finally:
+                monitor.close()
+                # print(f"{signaler_id_str}: Zakończono.")
+
+        # Tworzenie procesów kelnerów dla warunku X
+        for pid_str in waiter_ids_cond_X:
+            p = Process(target=waiter_func, args=(pid_str, condition_X_name, monitor_name_test, self.SERVER_ADDRESS, barrier, completed_waiter_ids))
+            waiter_processes.append(p)
+
+        # Tworzenie procesów kelnerów dla warunku Y
+        for pid_str in waiter_ids_cond_Y:
+            p = Process(target=waiter_func, args=(pid_str, condition_Y_name, monitor_name_test, self.SERVER_ADDRESS, barrier, completed_waiter_ids))
+            waiter_processes.append(p)
+        
+        # Tworzenie procesów sygnalizatorów
+        signaler_X = Process(target=signaler_func, args=("Signaler_X", condition_X_name, monitor_name_test, self.SERVER_ADDRESS, barrier, signaler_reports, 0.3))
+        signaler_Y = Process(target=signaler_func, args=("Signaler_Y", condition_Y_name, monitor_name_test, self.SERVER_ADDRESS, barrier, signaler_reports, 0.5))
+
+        all_processes = waiter_processes + [signaler_X, signaler_Y]
+        for p in all_processes:
+            p.start()
+
+        # Oczekiwanie na zakończenie sygnalizatorów
+        signaler_X.join(timeout=5)
+        signaler_Y.join(timeout=5)
+        self.assertFalse(signaler_X.is_alive(), "Signaler_X nie zakończył się.")
+        self.assertFalse(signaler_Y.is_alive(), "Signaler_Y nie zakończył się.")
+
+        # Sprawdzenie raportów sygnalizatorów
+        self.assertEqual(len(signaler_reports), NUM_SIGNALERS, "Nie wszystkie raporty sygnalizatorów zostały zebrane.")
+        for sid, count in signaler_reports:
+            self.assertEqual(count, 1, f"Sygnalizator {sid} obudził {count} procesów, oczekiwano 1.")
+
+        # Oczekiwanie na zakończenie procesów kelnerów (niektóre powinny się zakończyć, inne nie)
+        time.sleep(1) # Dodatkowy czas na przetworzenie sygnałów i zakończenie pracy przez obudzonych kelnerów
+
+        finished_waiters_count = 0
+        for p in waiter_processes:
+            p.join(timeout=0.1) 
+            if not p.is_alive():
+                finished_waiters_count += 1
+            else:
+                p.terminate() 
+                p.join(timeout=1)
+
+        self.assertEqual(len(completed_waiter_ids), 2, f"Oczekiwano 2 zakończonych kelnerów, otrzymano {len(completed_waiter_ids)}. Zakończone: {list(completed_waiter_ids)}")
+        completed_X_count = sum(1 for pid_str in completed_waiter_ids if pid_str.startswith("Waiter_X"))
+        completed_Y_count = sum(1 for pid_str in completed_waiter_ids if pid_str.startswith("Waiter_Y"))
+        self.assertEqual(completed_X_count, 1, f"Oczekiwano 1 zakończonego kelnera dla warunku X, otrzymano {completed_X_count}. Zakończone: {list(completed_waiter_ids)}")
+        self.assertEqual(completed_Y_count, 1, f"Oczekiwano 1 zakończonego kelnera dla warunku Y, otrzymano {completed_Y_count}. Zakończone: {list(completed_waiter_ids)}")
+        self.assertEqual(finished_waiters_count, 2, f"Oczekiwano, że 2 procesy kelnerów zakończą się, a zakończyło się {finished_waiters_count}.")
         print("ok")
 
 
