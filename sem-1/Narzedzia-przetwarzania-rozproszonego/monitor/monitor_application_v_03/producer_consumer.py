@@ -21,32 +21,49 @@ NUM_PRODUCERS = 2
 NUM_CONSUMERS = 2
 ITEMS_PER_PRODUCER = 10
 
-def producer_process(producer_id: int, buffer_proxy: BoundedBuffer, num_items: int, produced_items_list):
+def producer_process(producer_id: int, 
+                     monitor_name: str, 
+                     server_addr: str, 
+                     buffer_cap: int, 
+                     num_items: int, 
+                     produced_items_list):
     """
     Proces producenta.
     """
-    print(f"Producent {producer_id} (PID: {current_process().pid}, Monitor Client PID: {buffer_proxy.monitor.process_id}) startuje...")
+    # Każdy proces tworzy własnego klienta monitora i BoundedBuffer
+    monitor_client = DistributedMonitor(monitor_name, server_addr)
+    bb_instance = BoundedBuffer(buffer_cap, monitor_client)
+    print(f"Producent {producer_id} (PID: {current_process().pid}, Monitor Client PID: {bb_instance.monitor.process_id}) startuje...")
     for i in range(num_items):
         item = f"Item-{producer_id}-{i}"
         time.sleep(random.uniform(0.1, 0.5)) # Symulacja produkcji
         print(f"Producent {producer_id} chce dodać: {item}")
-        buffer_proxy.put(item)
+        bb_instance.put(item)
         print(f"Producent {producer_id} dodał: {item}")
         produced_items_list.append(item)
     print(f"Producent {producer_id} zakończył.")
+    monitor_client.close() # Jawne zamknięcie monitora w procesie potomnym
 
-def consumer_process(consumer_id: int, buffer_proxy: BoundedBuffer, num_items_to_consume: int, consumed_items_list):
+def consumer_process(consumer_id: int, 
+                     monitor_name: str, 
+                     server_addr: str, 
+                     buffer_cap: int, 
+                     num_items_to_consume: int, 
+                     consumed_items_list):
     """
     Proces konsumenta.
     """
-    print(f"Konsument {consumer_id} (PID: {current_process().pid}, Monitor Client PID: {buffer_proxy.monitor.process_id}) startuje...")
+    monitor_client = DistributedMonitor(monitor_name, server_addr)
+    bb_instance = BoundedBuffer(buffer_cap, monitor_client)
+    print(f"Konsument {consumer_id} (PID: {current_process().pid}, Monitor Client PID: {bb_instance.monitor.process_id}) startuje...")
     for _ in range(num_items_to_consume):
         time.sleep(random.uniform(0.2, 0.8)) # Symulacja konsumpcji
         print(f"Konsument {consumer_id} chce pobrać element...")
-        item = buffer_proxy.get()
+        item = bb_instance.get()
         print(f"Konsument {consumer_id} pobrał: {item}")
         consumed_items_list.append(item)
     print(f"Konsument {consumer_id} zakończył.")
+    monitor_client.close() # Jawne zamknięcie monitora w procesie potomnym
 
 if __name__ == "__main__":
     print("Uruchamianie aplikacji Producent-Konsument z rozproszonym monitorem...")
@@ -80,26 +97,32 @@ if __name__ == "__main__":
 
     # Tworzenie i uruchamianie producentów
     for i in range(NUM_PRODUCERS):
-        # Każdy proces tworzy własnego klienta monitora i BoundedBuffer
-        # Ważne: używają tej samej nazwy monitora i adresu serwera
-        monitor_client = DistributedMonitor(MONITOR_NAME_BB, SERVER_ADDRESS)
-        bb_instance = BoundedBuffer(BUFFER_CAPACITY, monitor_client)
-        p = Process(target=producer_process, args=(i, bb_instance, ITEMS_PER_PRODUCER, produced_items))
+        p = Process(target=producer_process, args=(
+            i, 
+            MONITOR_NAME_BB, 
+            SERVER_ADDRESS, 
+            BUFFER_CAPACITY, 
+            ITEMS_PER_PRODUCER, 
+            produced_items
+        ))
         processes.append(p)
         p.start()
 
     # Tworzenie i uruchamianie konsumentów
     for i in range(NUM_CONSUMERS):
-        monitor_client = DistributedMonitor(MONITOR_NAME_BB, SERVER_ADDRESS)
-        with monitor_client:
-            print("======\nmonitor client lisening: " + monitor_client.server_address)
-        bb_instance = BoundedBuffer(BUFFER_CAPACITY, monitor_client)
         # Każdy konsument próbuje pobrać swoją część wszystkich wyprodukowanych elementów
         items_for_this_consumer = total_items_to_produce // NUM_CONSUMERS
         if i < total_items_to_produce % NUM_CONSUMERS: # Rozdziel resztę
             items_for_this_consumer +=1
         
-        p = Process(target=consumer_process, args=(i, bb_instance, items_for_this_consumer, consumed_items))
+        p = Process(target=consumer_process, args=(
+            i, 
+            MONITOR_NAME_BB, 
+            SERVER_ADDRESS, 
+            BUFFER_CAPACITY, 
+            items_for_this_consumer, 
+            consumed_items
+        ))
         processes.append(p)
         p.start()
 
@@ -121,4 +144,3 @@ if __name__ == "__main__":
             print(f"  Błąd: Oczekiwano {total_items_to_produce} skonsumowanych elementów, otrzymano {len(consumed_items)}.")
         if sorted(list(produced_items)) != sorted(list(consumed_items)):
             print("  Błąd: Lista wyprodukowanych i skonsumowanych elementów nie jest identyczna.")
-
