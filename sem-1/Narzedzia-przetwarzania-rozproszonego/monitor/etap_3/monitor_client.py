@@ -3,8 +3,8 @@ import uuid
 import logging
 import time
 
-# Konfiguracja loggera
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+# Można odkomentować, aby włączyć logowanie klienta podczas normalnego działania
+# logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 
 class DistributedMonitor:
     """
@@ -26,41 +26,31 @@ class DistributedMonitor:
             self.logger.info(f"Połączono z {self.server_address}")
 
     def _send_request(self, command, payload=None):
-        """Wysyła żądanie do serwera i zwraca jego odpowiedź."""
         self._connect()
-        request = {'client_id': self.client_id, 'command': command}
-        if payload:
-            request['payload'] = payload
-        
+        request = {'client_id': self.client_id, 'command': command, 'payload': payload}
         self.socket.send_json(request)
         return self.socket.recv_json()
 
     def enter(self):
-        """Wejście do monitora (uzyskanie muteksu)."""
         if self._has_mutex:
-            raise RuntimeError("Błąd: Próba ponownego wejścia do monitora bez jego opuszczenia.")
+            raise RuntimeError("Błąd: Próba ponownego wejścia do monitora.")
             
         self.logger.info("Próba wejścia do monitora...")
         
-        # Pierwsze żądanie
-        response = self._send_request('ENTER')
-        
-        # Pętla oczekiwania, jeśli serwer nas zakolejkował
-        while response['status'] == 'QUEUED':
-            self.logger.info(f"W kolejce po muteks (pozycja {response['position']})")
-            time.sleep(1) # Czekamy chwilę przed ponownym zapytaniem o status
+        while not self._has_mutex:
             response = self._send_request('ENTER')
-
-        if response['status'] == 'GRANTED':
-            self._has_mutex = True
-            self.logger.info("Wszedłem do monitora.")
-        else:
-            raise Exception(f"Nie udało się wejść do monitora: {response.get('message')}")
+            if response['status'] == 'GRANTED':
+                self._has_mutex = True
+                self.logger.info("Wszedłem do monitora.")
+            elif response['status'] == 'QUEUED':
+                self.logger.info(f"W kolejce po muteks (pozycja {response['position']})")
+                time.sleep(0.1)
+            else:
+                raise Exception(f"Nie udało się wejść do monitora: {response.get('message')}")
 
     def exit(self):
-        """Wyjście z monitora (zwolnienie muteksu)."""
         if not self._has_mutex:
-            raise RuntimeError("Błąd: Próba wyjścia z monitora bez wcześniejszego wejścia.")
+            raise RuntimeError("Błąd: Próba wyjścia z monitora bez wejścia.")
             
         self.logger.info("Wychodzenie z monitora...")
         response = self._send_request('EXIT')
@@ -68,67 +58,42 @@ class DistributedMonitor:
             self._has_mutex = False
             self.logger.info("Wyszedłem z monitora.")
         else:
-            # W przypadku błędu, stan klienta może być niespójny z serwerem.
-            # W realnym systemie wymagałoby to zaawansowanej obsługi.
             raise Exception(f"Błąd przy wychodzeniu z monitora: {response.get('message')}")
 
-    # NOWOŚĆ: Metody do obsługi zmiennych warunkowych
     def wait(self, condition_name):
-        """Oczekiwanie na warunek."""
         if not self._has_mutex:
             raise RuntimeError("Błąd: wait() musi być wywołane wewnątrz monitora.")
 
         self.logger.info(f"Czekam na warunek '{condition_name}'...")
-        self._connect()
-        
-        # Wysyłamy żądanie WAIT i zwalniamy muteks po stronie serwera
-        request = {'client_id': self.client_id, 'command': 'WAIT', 'payload': {'condition': condition_name}}
-        self.socket.send_json(request)
-        self._has_mutex = False # Logicznie zwalniamy muteks
-        
-        # Czekamy na odpowiedź GRANTED od serwera, która oznacza, że zostaliśmy obudzeni
-        # i ponownie otrzymaliśmy muteks
-        response = self.socket.recv_json()
-
-        if response['status'] == 'GRANTED':
-            self._has_mutex = True
-            self.logger.info(f"Obudzony i ponownie wszedłem do monitora po oczekiwaniu na '{condition_name}'.")
-        else:
-            raise Exception(f"Błąd podczas oczekiwania na warunek: {response.get('message')}")
-
-    def signal(self, condition_name):
-        """Sygnalizacja warunku."""
-        if not self._has_mutex:
-            raise RuntimeError("Błąd: signal() musi być wywołane wewnątrz monitora.")
-        
-        self.logger.info(f"Sygnalizuję warunek '{condition_name}'...")
-        response = self._send_request('SIGNAL', {'condition': condition_name})
+        response = self._send_request('WAIT', {'condition': condition_name})
 
         if response['status'] != 'OK':
-            raise Exception(f"Błąd podczas sygnalizacji warunku: {response.get('message')}")
+            raise Exception(f"Serwer odrzucił prośbę o wait: {response.get('message')}")
+        
+        self._has_mutex = False
+        self.logger.info("Zwolniłem muteks, aby czekać. Próbuję wejść ponownie...")
+        
+        self.enter()
+
+    def signal(self, condition_name):
+        if not self._has_mutex:
+            raise RuntimeError("Błąd: signal() musi być wywołane wewnątrz monitora.")
+        self._send_request('SIGNAL', {'condition': condition_name})
         self.logger.info(f"Warunek '{condition_name}' zasygnalizowany.")
 
     def broadcast(self, condition_name):
-        """Sygnalizacja warunku do wszystkich oczekujących."""
         if not self._has_mutex:
             raise RuntimeError("Błąd: broadcast() musi być wywołane wewnątrz monitora.")
-            
-        self.logger.info(f"Sygnalizuję broadcast dla warunku '{condition_name}'...")
-        response = self._send_request('BROADCAST', {'condition': condition_name})
-
-        if response['status'] != 'OK':
-            raise Exception(f"Błąd podczas broadcast: {response.get('message')}")
+        self._send_request('BROADCAST', {'condition': condition_name})
         self.logger.info(f"Broadcast dla warunku '{condition_name}' wysłany.")
 
     def close(self):
-        """Zamyka połączenie z serwerem."""
+        """POPRAWKA: Przywracamy zamykanie kontekstu."""
         if self._is_connected:
             self.socket.close()
-            self.context.term()
+            self.context.term() # Ta linia jest kluczowa do uniknięcia ResourceWarning
             self._is_connected = False
-            self.logger.info("Połączenie zamknięte.")
 
-    # Użycie jako context manager (with DistributedMonitor(...) as monitor:)
     def __enter__(self):
         self.enter()
         return self
