@@ -5,9 +5,9 @@ Zapewnia transparentny interfejs podobny do standardowych monitorów
 Protokół komunikacyjny:
 1. ENTER_MONITOR -> {status: "granted"/"queued"}
 2. Jeśli "queued", potem CHECK_GRANT -> {status: "granted"/"queued"}
-3. WAIT_CONDITION -> {status: "waiting_on_condition"}  
-4. Potem CHECK_AWAKENED -> {status: "granted"/"waiting_on_condition"}
-5. SIGNAL_CONDITION/BROADCAST_CONDITION -> {status: "success", woken_processes: int}
+3. WAIT -> {status: "waiting_on_condition"}
+4. Potem CHECK_AWAKENED -> {status: "granted_after_wait"/"still_waiting_on_condition"/"queued_after_signal"}
+5. SIGNAL/BROADCAST -> {status: "success", woken_processes: int}
 6. EXIT_MONITOR -> {status: "success"}
 
 Polling strategy pozwala na pełne blokowanie operacji enter() i wait()
@@ -159,7 +159,7 @@ class DistributedMonitor:
         
         # Wysłanie pierwotnego żądania wejścia
         request = {
-            "operation": "ENTER_MONITOR"
+            "action": "ENTER"
         }
         
         response = self._send_request(request)
@@ -175,15 +175,12 @@ class DistributedMonitor:
         else:
             raise MonitorError(f"Nieoczekiwana odpowiedź serwera: {response}")
     
-    def _wait_for_grant(self, poll_interval: float = 0.1) -> None:
+    def _wait_for_grant(self) -> None:
         """
         Oczekiwanie na przyznanie dostępu do monitora przez polling
-        
-        Args:
-            poll_interval: interwał między sprawdzeniami w sekundach
         """
         check_request = {
-            "operation": "CHECK_GRANT"
+            "action": "CHECK_GRANT"
         }
         
         while True:
@@ -211,7 +208,7 @@ class DistributedMonitor:
             raise MonitorError("Proces nie znajduje się w monitorze")
         
         request = {
-            "operation": "EXIT_MONITOR"
+            "action": "EXIT"
         }
         
         response = self._send_request(request)
@@ -239,33 +236,44 @@ class DistributedMonitor:
         if not condition_name:
             raise MonitorError("Nazwa warunku nie może być pusta")
         
+        self._entered = False # Zwalniamy mutex przed oczekiwaniem
+        self._current_condition = condition_name
+        
         # Wysłanie żądania wait - mutex zostanie zwolniony, proces dodany do kolejki warunku
         request = {
-            "operation": "WAIT_CONDITION",
+            "action": "WAIT",
             "condition_name": condition_name
         }
         
-        response = self._send_request(request)
-        
-        if response.get("status") == "waiting_on_condition":
-            # Zostaliśmy dodani do kolejki warunku, mutex został zwolniony
-            # Teraz sprawdzamy periodycznie czy zostaliśmy wybudzeni
-            self._wait_for_awakening(condition_name)
-        elif response.get("status") == "error":
-            raise MonitorError(f"Błąd wait(): {response.get('message', 'Nieznany błąd')}")
-        else:
-            raise MonitorError(f"Nieoczekiwana odpowiedź serwera: {response}")
+        try:
+            response = self._send_request(request)
+            
+            if response.get("status") == "waiting_on_condition":
+                # Zostaliśmy dodani do kolejki warunku, mutex został zwolniony
+                # Teraz sprawdzamy periodycznie czy zostaliśmy wybudzeni i odzyskaliśmy mutex
+                self._wait_for_awakening(condition_name)
+            elif response.get("status") == "error":
+                self._entered = True # Błąd, więc nie weszliśmy w stan wait, przywracamy _entered
+                self._current_condition = None
+                raise MonitorError(f"Błąd wait(): {response.get('message', 'Nieznany błąd')}")
+            else:
+                self._entered = True # Nieznana odpowiedź, przywracamy _entered
+                self._current_condition = None
+                raise MonitorError(f"Nieoczekiwana odpowiedź serwera na WAIT: {response}")
+        except Exception as e:
+            self._entered = True # Na wypadek błędu, przywracamy _entered
+            self._current_condition = None
+            raise e
     
-    def _wait_for_awakening(self, condition_name: str, poll_interval: float = 0.1) -> None:
+    def _wait_for_awakening(self, condition_name: str) -> None:
         """
         Oczekiwanie na wybudzenie z warunku przez polling
         
         Args:
             condition_name: nazwa warunku na którym czekamy
-            poll_interval: interwał między sprawdzeniami w sekundach
         """
         check_request = {
-            "operation": "CHECK_AWAKENED",
+            "action": "CHECK_AWAKENED",
             "condition_name": condition_name
         }
         
@@ -273,12 +281,15 @@ class DistributedMonitor:
             time.sleep(poll_interval)
             response = self._send_request(check_request)
             
-            if response.get("status") == "granted":
+            status = response.get("status")
+            if status == "granted_after_wait":
                 # Zostaliśmy wybudzeni i dostaliśmy z powrotem mutex
+                self._entered = True
+                self._current_condition = None
                 return
-            elif response.get("status") == "waiting_on_condition":
-                continue  # Nadal czekamy na warunek
-            elif response.get("status") == "error":
+            elif status in ["still_waiting_on_condition", "queued_after_signal"]:
+                continue  # Nadal czekamy na warunek lub na mutex po sygnale
+            elif status == "error":
                 raise MonitorError(f"Błąd podczas oczekiwania na wybudzenie: {response.get('message', 'Nieznany błąd')}")
             else:
                 raise MonitorError(f"Nieoczekiwana odpowiedź serwera: {response}")
@@ -303,7 +314,7 @@ class DistributedMonitor:
             raise MonitorError("Nazwa warunku nie może być pusta")
         
         request = {
-            "operation": "SIGNAL_CONDITION",
+            "action": "SIGNAL",
             "condition_name": condition_name
         }
         
@@ -334,7 +345,7 @@ class DistributedMonitor:
             raise MonitorError("Nazwa warunku nie może być pusta")
         
         request = {
-            "operation": "BROADCAST_CONDITION", 
+            "action": "BROADCAST",
             "condition_name": condition_name
         }
         

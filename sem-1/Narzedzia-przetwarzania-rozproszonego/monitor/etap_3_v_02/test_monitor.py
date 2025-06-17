@@ -23,6 +23,7 @@ class BaseMonitorTestCase(unittest.TestCase):
     """
     SERVER_PORT = 5555
     SERVER_ADDRESS = f"tcp://localhost:{SERVER_PORT}"
+    MONITOR_NAME = "test_monitor_global" # Domyślna nazwa monitora dla testów
     server_process = None
 
     @classmethod
@@ -45,7 +46,7 @@ class TestBasicConnectivity(BaseMonitorTestCase):
         """Test: Klient może się połączyć z serwerem i rozłączyć."""
         print("\nTest: Klient może się połączyć z serwerem...")
         try:
-            client = DistributedMonitor(self.SERVER_ADDRESS)
+            client = DistributedMonitor(self.MONITOR_NAME, self.SERVER_ADDRESS)
             # Połączenie jest nawiązywane przy pierwszej operacji
             client._connect()
             client.close()
@@ -61,18 +62,18 @@ class TestMutexOperations(BaseMonitorTestCase):
     def test_02_basic_enter_exit(self):
         """Test: Podstawowe wejście/wyjście z monitora."""
         print("\nTest: Podstawowe wejście/wyjście z monitora...")
-        monitor = DistributedMonitor(self.SERVER_ADDRESS)
+        monitor = DistributedMonitor(self.MONITOR_NAME, self.SERVER_ADDRESS)
         with monitor:
-            self.assertTrue(monitor._has_mutex)
-        self.assertFalse(monitor._has_mutex)
+            self.assertTrue(monitor.is_entered())
+        self.assertFalse(monitor.is_entered())
         print("ok")
 
     def test_03_double_enter_error(self):
         """Test: Błąd przy próbie podwójnego wejścia do monitora."""
         print("\nTest: Błąd przy podwójnym wejściu...")
-        monitor = DistributedMonitor(self.SERVER_ADDRESS)
+        monitor = DistributedMonitor(self.MONITOR_NAME, self.SERVER_ADDRESS)
         monitor.enter()
-        with self.assertRaises(RuntimeError):
+        with self.assertRaises(MonitorError): # Zmieniono z RuntimeError
             monitor.enter()
         monitor.exit()
         monitor.close()
@@ -81,8 +82,8 @@ class TestMutexOperations(BaseMonitorTestCase):
     def test_04_exit_without_enter_error(self):
         """Test: Błąd przy próbie wyjścia z monitora bez wejścia."""
         print("\nTest: Błąd przy wyjściu bez wejścia...")
-        monitor = DistributedMonitor(self.SERVER_ADDRESS)
-        with self.assertRaises(RuntimeError):
+        monitor = DistributedMonitor(self.MONITOR_NAME, self.SERVER_ADDRESS)
+        with self.assertRaises(MonitorError): # Zmieniono z RuntimeError
             monitor.exit()
         monitor.close()
         print("ok")
@@ -100,8 +101,10 @@ class TestConcurrentAccess(BaseMonitorTestCase):
         # Lista do zapisywania przedziałów czasowych, w których procesy były w monitorze
         time_intervals = manager.list()
 
-        def worker_process():
-            monitor = DistributedMonitor(self.SERVER_ADDRESS)
+        # Używamy tej samej nazwy monitora dla wszystkich procesów w tym teście
+        worker_monitor_name = f"{self.MONITOR_NAME}_mutex"
+        def worker_process(monitor_name_arg):
+            monitor = DistributedMonitor(monitor_name_arg, self.SERVER_ADDRESS)
             barrier.wait()
             with monitor:
                 start_time = time.monotonic()
@@ -109,7 +112,7 @@ class TestConcurrentAccess(BaseMonitorTestCase):
                 end_time = time.monotonic()
                 time_intervals.append((start_time, end_time))
 
-        processes = [Process(target=worker_process) for _ in range(num_processes)]
+        processes = [Process(target=worker_process, args=(worker_monitor_name,)) for _ in range(num_processes)]
         for p in processes:
             p.start()
         for p in processes:
@@ -132,20 +135,22 @@ class TestConditionVariables(BaseMonitorTestCase):
         """Test: Jeden klient czeka (wait), drugi go budzi (signal)."""
         print("\nTest: Podstawowy wait/signal...")
         barrier = Barrier(2)
-        
+        condition_name = "data_ready_06"
+        wait_signal_monitor_name = f"{self.MONITOR_NAME}_wait_signal"
+
         def waiter_process():
-            with DistributedMonitor(self.SERVER_ADDRESS) as monitor:
+            with DistributedMonitor(wait_signal_monitor_name, self.SERVER_ADDRESS) as monitor:
                 barrier.wait()
-                monitor.wait("data_ready")
+                monitor.wait(condition_name)
 
         def signaler_process():
             # Czekamy chwilę, aby 'waiter' na pewno wszedł pierwszy
             time.sleep(0.2)
-            with DistributedMonitor(self.SERVER_ADDRESS) as monitor:
+            with DistributedMonitor(wait_signal_monitor_name, self.SERVER_ADDRESS) as monitor:
                 barrier.wait()
-                monitor.signal("data_ready")
+                monitor.signal(condition_name)
 
-        p_waiter = Process(target=waiter_process)
+        p_waiter = Process(target=waiter_process) # Nazwa monitora jest hardkodowana w funkcji
         p_signaler = Process(target=signaler_process)
 
         p_waiter.start()
@@ -162,20 +167,22 @@ class TestConditionVariables(BaseMonitorTestCase):
         print("\nTest: Sygnalizacja broadcast...")
         num_waiters = 3
         barrier = Barrier(num_waiters + 1)
-        
+        condition_name = "start_all_07"
+        broadcast_monitor_name = f"{self.MONITOR_NAME}_broadcast"
+
         def waiter_process():
-            with DistributedMonitor(self.SERVER_ADDRESS) as monitor:
+            with DistributedMonitor(broadcast_monitor_name, self.SERVER_ADDRESS) as monitor:
                 barrier.wait()
-                monitor.wait("start_all")
+                monitor.wait(condition_name)
         
         def broadcaster_process():
             # Czekamy, aż wszyscy waiterzy wejdą do kolejki
             time.sleep(0.5)
-            with DistributedMonitor(self.SERVER_ADDRESS) as monitor:
+            with DistributedMonitor(broadcast_monitor_name, self.SERVER_ADDRESS) as monitor:
                 barrier.wait()
-                monitor.broadcast("start_all")
+                monitor.broadcast(condition_name)
 
-        waiters = [Process(target=waiter_process) for _ in range(num_waiters)]
+        waiters = [Process(target=waiter_process) for _ in range(num_waiters)] # Nazwa monitora jest hardkodowana
         broadcaster = Process(target=broadcaster_process)
 
         for p in waiters:
