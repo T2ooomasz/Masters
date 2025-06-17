@@ -25,31 +25,34 @@ class LocalBoundedBuffer:
     """
     Implementacja BoundedBuffer z lokalnym monitorem (threading.Lock/Condition).
     """
-    def __init__(self, capacity: int):
+    def __init__(self, capacity: int, shared_buffer_proxy=None): # Dodajemy shared_buffer_proxy
         self.capacity = capacity
-        self.buffer = []
-        self.lock = threading.Lock()
-        self.not_full = threading.Condition(self.lock)
-        self.not_empty = threading.Condition(self.lock)
+        # Jeśli shared_buffer_proxy nie jest dostarczony (np. dla testów jednowątkowych/jednoprocesowych bez Managera),
+        # tworzymy zwykłą listę. W kontekście tego testu zawsze będzie dostarczony.
+        self.buffer = shared_buffer_proxy if shared_buffer_proxy is not None else []
+        self.lock = mp.Lock() # Używamy multiprocessing.Lock
+        self.not_full = mp.Condition(self.lock) # Używamy multiprocessing.Condition
+        self.not_empty = mp.Condition(self.lock)
 
     def put(self, item):
         with self.lock:
             while len(self.buffer) >= self.capacity:
                 self.not_full.wait()
             self.buffer.append(item)
-            self.not_empty.notify()
+            self.not_empty.notify() # Wystarczy notify, bo tylko jeden konsument może wziąć element
 
     def get(self):
         with self.lock:
             while len(self.buffer) == 0:
                 self.not_empty.wait()
             item = self.buffer.pop(0)
-            self.not_full.notify()
+            self.not_full.notify() # Wystarczy notify, bo tylko jeden producent może dodać element
             return item
 
 def producer_consumer_test(buffer_type_str, num_producers, num_consumers, items_per_producer, capacity, server_address, monitor_name_prefix):
     """
     Funkcja testująca producentów i konsumentów dla danej klasy bufora.
+
 
     Args:
         buffer_type_str: "distributed" lub "local"
@@ -65,7 +68,8 @@ def producer_consumer_test(buffer_type_str, num_producers, num_consumers, items_
 
     # Dla rozproszonego bufora, potrzebujemy współdzielonej listy dla samego bufora
     manager = mp.Manager()
-    shared_actual_buffer = manager.list() if buffer_type_str == "distributed" else None
+    # Zarówno lokalny (wieloprocesowy) jak i rozproszony będą używać współdzielonej listy
+    shared_actual_buffer = manager.list()
 
     # Producenci
     for i in range(num_producers):
@@ -97,7 +101,7 @@ def producer_worker(buffer_type_str, capacity, num_items, producer_id, server_ad
         monitor = DistributedMonitor(monitor_name, server_address)
         buffer = BoundedBuffer(capacity, monitor, shared_buffer_proxy)
     else: # local
-        buffer = LocalBoundedBuffer(capacity)
+        buffer = LocalBoundedBuffer(capacity, shared_buffer_proxy) # Przekazujemy shared_buffer_proxy
 
     for i in range(num_items):
         item = (producer_id, i)
@@ -111,7 +115,7 @@ def consumer_worker(buffer_type_str, capacity, num_items, consumer_id, server_ad
         monitor = DistributedMonitor(monitor_name, server_address)
         buffer = BoundedBuffer(capacity, monitor, shared_buffer_proxy)
     else: # local
-        buffer = LocalBoundedBuffer(capacity)
+        buffer = LocalBoundedBuffer(capacity, shared_buffer_proxy) # Przekazujemy shared_buffer_proxy
 
     for _ in range(num_items):
         buffer.get()
@@ -124,7 +128,7 @@ if __name__ == "__main__":
     capacity = 10
     num_producers = 2
     num_consumers = 2
-    items_per_producer = 1
+    items_per_producer = 1000
     server_address = "tcp://localhost:5555"
     monitor_name_base = "perf_test_monitor"
 
@@ -133,7 +137,6 @@ if __name__ == "__main__":
     
     distributed_times = []
     for i in range(num_runs):
-        print(f"run {i+1}")
         start_time = time.time()
         # Dla każdego uruchomienia testu rozproszonego, używamy unikalnej nazwy monitora,
         # aby uniknąć konfliktów stanu na serwerze, jeśli serwer nie jest resetowany.
@@ -147,7 +150,6 @@ if __name__ == "__main__":
 
     local_times = []
     for i in range(num_runs):
-        print(f"run {i+1}")
         start_time = time.time()
         # Dla testu lokalnego, server_address i monitor_name nie są używane, ale przekazujemy je dla spójności API
         # shared_actual_buffer również nie jest używany przez LocalBoundedBuffer
