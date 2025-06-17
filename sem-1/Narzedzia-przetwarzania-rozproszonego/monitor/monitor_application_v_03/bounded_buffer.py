@@ -6,17 +6,13 @@ from collections import deque
 import sys
 import os
 
+from monitor_client import DistributedMonitor, MonitorError
 # Dodaj ścieżkę do katalogu nadrzędnego, aby importować monitor_client
 # To jest potrzebne, jeśli uruchamiasz ten plik bezpośrednio,
 # a monitor_client jest w katalogu o jeden poziom wyżej.
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+#sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-try:
-    from monitor_client import DistributedMonitor, MonitorError
-except ImportError:
-    print("Nie można zaimportować DistributedMonitor. Upewnij się, że monitor_client.py jest w PYTHONPATH.")
-    print("Aktualna ścieżka sys.path:", sys.path)
-    sys.exit(1)
+
 
 
 class BoundedBuffer:
@@ -38,6 +34,7 @@ class BoundedBuffer:
         """
         Dodaje element do bufora. Blokuje, jeśli bufor jest pełny.
         """
+        print(self.monitor.server_address)
         with self.monitor: # Automatyczne enter() i exit()
             while len(self.buffer) >= self.capacity:
                 print(f"Bufor pełny ({len(self.buffer)}/{self.capacity}). Proces {self.monitor.process_id} czeka na '{self.COND_NOT_FULL}'...")

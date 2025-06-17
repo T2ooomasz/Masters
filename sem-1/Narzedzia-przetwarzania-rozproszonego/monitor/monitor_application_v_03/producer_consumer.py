@@ -7,20 +7,15 @@ import random
 from multiprocessing import Process, current_process, Manager
 import sys
 import os
-
+from monitor_client import DistributedMonitor, MonitorError, MonitorPool
+from bounded_buffer import BoundedBuffer
 # Dodaj ścieżkę do katalogu nadrzędnego
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+# sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-try:
-    from monitor_client import DistributedMonitor, MonitorPool
-    from bounded_buffer import BoundedBuffer
-except ImportError:
-    print("Nie można zaimportować modułów. Upewnij się, że monitor_client.py i bounded_buffer.py są w PYTHONPATH lub w bieżącym katalogu.")
-    sys.exit(1)
 
 # Konfiguracja
 SERVER_ADDRESS = "tcp://localhost:5555" # Upewnij się, że serwer monitora działa pod tym adresem
-MONITOR_NAME_BB = "bounded_buffer_monitor_app"
+MONITOR_NAME_BB = "test_monitor"
 BUFFER_CAPACITY = 5
 NUM_PRODUCERS = 2
 NUM_CONSUMERS = 2
@@ -96,6 +91,8 @@ if __name__ == "__main__":
     # Tworzenie i uruchamianie konsumentów
     for i in range(NUM_CONSUMERS):
         monitor_client = DistributedMonitor(MONITOR_NAME_BB, SERVER_ADDRESS)
+        with monitor_client:
+            print("======\nmonitor client lisening: " + monitor_client.server_address)
         bb_instance = BoundedBuffer(BUFFER_CAPACITY, monitor_client)
         # Każdy konsument próbuje pobrać swoją część wszystkich wyprodukowanych elementów
         items_for_this_consumer = total_items_to_produce // NUM_CONSUMERS
