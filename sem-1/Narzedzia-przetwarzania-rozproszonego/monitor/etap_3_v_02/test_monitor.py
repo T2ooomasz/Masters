@@ -1,3 +1,21 @@
+======================================================================
+FAIL: test_06_basic_wait_signal (__main__.TestConditionVariables.test_06_basic_wait_signal)
+Test: Jeden klient czeka (wait), drugi go budzi (signal).
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/tomek/repos/Masters/sem-1/Narzedzia-przetwarzania-rozproszonego/monitor/etap_3_v_02/test_monitor.py", line 162, in test_06_basic_wait_signal
+    self.assertFalse(p_waiter.is_alive(), "Proces 'waiter' nie zakończył się.")
+AssertionError: True is not false : Proces 'waiter' nie zakończył się.
+
+======================================================================
+FAIL: test_07_broadcast (__main__.TestConditionVariables.test_07_broadcast)
+Test: Jeden klient budzi wielu oczekujących (broadcast).
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/tomek/repos/Masters/sem-1/Narzedzia-przetwarzania-rozproszonego/monitor/etap_3_v_02/test_monitor.py", line 196, in test_07_broadcast
+    self.assertFalse(broadcaster.is_alive(), "Proces 'broadcaster' nie zakończył się.")
+AssertionError: True is not false : Proces 'broadcaster' nie zakończył się.
+
 import unittest
 import time
 import logging
