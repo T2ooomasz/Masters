@@ -1,21 +1,3 @@
-======================================================================
-FAIL: test_06_basic_wait_signal (__main__.TestConditionVariables.test_06_basic_wait_signal)
-Test: Jeden klient czeka (wait), drugi go budzi (signal).
-----------------------------------------------------------------------
-Traceback (most recent call last):
-  File "/home/tomek/repos/Masters/sem-1/Narzedzia-przetwarzania-rozproszonego/monitor/etap_3_v_02/test_monitor.py", line 162, in test_06_basic_wait_signal
-    self.assertFalse(p_waiter.is_alive(), "Proces 'waiter' nie zakończył się.")
-AssertionError: True is not false : Proces 'waiter' nie zakończył się.
-
-======================================================================
-FAIL: test_07_broadcast (__main__.TestConditionVariables.test_07_broadcast)
-Test: Jeden klient budzi wielu oczekujących (broadcast).
-----------------------------------------------------------------------
-Traceback (most recent call last):
-  File "/home/tomek/repos/Masters/sem-1/Narzedzia-przetwarzania-rozproszonego/monitor/etap_3_v_02/test_monitor.py", line 196, in test_07_broadcast
-    self.assertFalse(broadcaster.is_alive(), "Proces 'broadcaster' nie zakończył się.")
-AssertionError: True is not false : Proces 'broadcaster' nie zakończył się.
-
 import unittest
 import time
 import logging
@@ -157,23 +139,36 @@ class TestConditionVariables(BaseMonitorTestCase):
         wait_signal_monitor_name = f"{self.MONITOR_NAME}_wait_signal"
 
         def waiter_process():
-            with DistributedMonitor(wait_signal_monitor_name, self.SERVER_ADDRESS) as monitor:
-                barrier.wait()
-                monitor.wait(condition_name)
+            monitor = None
+            try:
+                monitor = DistributedMonitor(wait_signal_monitor_name, self.SERVER_ADDRESS, poll_interval=0.05)
+                barrier.wait() # Waiter is ready
+                with monitor:
+                    monitor.wait(condition_name)
+            finally:
+                if monitor:
+                    monitor.close()
 
         def signaler_process():
-            # Czekamy chwilę, aby 'waiter' na pewno wszedł pierwszy
-            time.sleep(0.2)
-            with DistributedMonitor(wait_signal_monitor_name, self.SERVER_ADDRESS) as monitor:
-                barrier.wait()
-                monitor.signal(condition_name)
+            monitor = None
+            try:
+                monitor = DistributedMonitor(wait_signal_monitor_name, self.SERVER_ADDRESS, poll_interval=0.05)
+                barrier.wait() # Signaler is ready
+                
+                # Give waiter a chance to enter the monitor, call wait(), and release the mutex
+                time.sleep(0.5) # Increased from 0.2s
 
-        p_waiter = Process(target=waiter_process) # Nazwa monitora jest hardkodowana w funkcji
+                with monitor:
+                    monitor.signal(condition_name)
+            finally:
+                if monitor:
+                    monitor.close()
+
+        p_waiter = Process(target=waiter_process)
         p_signaler = Process(target=signaler_process)
 
         p_waiter.start()
         p_signaler.start()
-
         p_waiter.join(timeout=5)
         p_signaler.join(timeout=5)
 
@@ -189,18 +184,33 @@ class TestConditionVariables(BaseMonitorTestCase):
         broadcast_monitor_name = f"{self.MONITOR_NAME}_broadcast"
 
         def waiter_process():
-            with DistributedMonitor(broadcast_monitor_name, self.SERVER_ADDRESS) as monitor:
-                barrier.wait()
-                monitor.wait(condition_name)
+            monitor = None
+            try:
+                monitor = DistributedMonitor(broadcast_monitor_name, self.SERVER_ADDRESS, poll_interval=0.05)
+                barrier.wait() # Waiter is ready
+                with monitor:
+                    monitor.wait(condition_name)
+            finally:
+                if monitor:
+                    monitor.close()
         
         def broadcaster_process():
-            # Czekamy, aż wszyscy waiterzy wejdą do kolejki
-            time.sleep(0.5)
-            with DistributedMonitor(broadcast_monitor_name, self.SERVER_ADDRESS) as monitor:
-                barrier.wait()
-                monitor.broadcast(condition_name)
+            monitor = None
+            try:
+                monitor = DistributedMonitor(broadcast_monitor_name, self.SERVER_ADDRESS, poll_interval=0.05)
+                barrier.wait() # Broadcaster is ready
+                
+                # Give all waiters a chance to enter the monitor, call wait(), and release the mutex
+                # so they are in the condition queue.
+                time.sleep(1.0) # Increased from 0.5s
 
-        waiters = [Process(target=waiter_process) for _ in range(num_waiters)] # Nazwa monitora jest hardkodowana
+                with monitor:
+                    monitor.broadcast(condition_name)
+            finally:
+                if monitor:
+                    monitor.close()
+
+        waiters = [Process(target=waiter_process) for _ in range(num_waiters)]
         broadcaster = Process(target=broadcaster_process)
 
         for p in waiters:
