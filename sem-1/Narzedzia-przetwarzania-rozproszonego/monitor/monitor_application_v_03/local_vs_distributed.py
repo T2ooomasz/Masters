@@ -124,7 +124,7 @@ if __name__ == "__main__":
     capacity = 10
     num_producers = 2
     num_consumers = 2
-    items_per_producer = 1000
+    items_per_producer = 1
     server_address = "tcp://localhost:5555"
     monitor_name_base = "perf_test_monitor"
 
@@ -133,6 +133,7 @@ if __name__ == "__main__":
     
     distributed_times = []
     for i in range(num_runs):
+        print(f"run {i+1}")
         start_time = time.time()
         # Dla każdego uruchomienia testu rozproszonego, używamy unikalnej nazwy monitora,
         # aby uniknąć konfliktów stanu na serwerze, jeśli serwer nie jest resetowany.
@@ -146,6 +147,7 @@ if __name__ == "__main__":
 
     local_times = []
     for i in range(num_runs):
+        print(f"run {i+1}")
         start_time = time.time()
         # Dla testu lokalnego, server_address i monitor_name nie są używane, ale przekazujemy je dla spójności API
         # shared_actual_buffer również nie jest używany przez LocalBoundedBuffer
