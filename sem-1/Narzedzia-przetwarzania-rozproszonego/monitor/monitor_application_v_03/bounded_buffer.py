@@ -23,25 +23,26 @@ class BoundedBuffer:
     COND_NOT_FULL = "not_full"
     COND_NOT_EMPTY = "not_empty"
 
-    def __init__(self, capacity: int, monitor: DistributedMonitor):
+    # Zmieniamy __init__, aby przyjmował współdzieloną kolejkę
+    def __init__(self, capacity: int, monitor: DistributedMonitor, shared_deque_proxy):
         if capacity <= 0:
             raise ValueError("Pojemność bufora musi być dodatnia")
         self.capacity = capacity
         self.monitor = monitor
-        self.buffer = deque() # Używamy deque dla efektywnych operacji append i popleft
+        self.buffer_proxy = shared_deque_proxy # To będzie np. manager.list() lub manager.Queue()
 
     def put(self, item):
         """
         Dodaje element do bufora. Blokuje, jeśli bufor jest pełny.
         """
-        print(self.monitor.server_address)
         with self.monitor: # Automatyczne enter() i exit()
-            while len(self.buffer) >= self.capacity:
-                print(f"Bufor pełny ({len(self.buffer)}/{self.capacity}). Proces {self.monitor.process_id} czeka na '{self.COND_NOT_FULL}'...")
+            # Operujemy na buffer_proxy
+            while len(self.buffer_proxy) >= self.capacity:
+                print(f"Bufor pełny ({len(self.buffer_proxy)}/{self.capacity}). Proces {self.monitor.process_id} czeka na '{self.COND_NOT_FULL}'...")
                 self.monitor.wait(self.COND_NOT_FULL)
             
-            self.buffer.append(item)
-            # print(f"Proces {self.monitor.process_id} dodał '{item}'. Bufor: {list(self.buffer)}")
+            self.buffer_proxy.append(item) # Zakładając, że proxy ma metodę append
+            # print(f"Proces {self.monitor.process_id} dodał '{item}'. Bufor: {list(self.buffer_proxy)}")
             self.monitor.signal(self.COND_NOT_EMPTY)
 
     def get(self):
@@ -49,12 +50,13 @@ class BoundedBuffer:
         Pobiera element z bufora. Blokuje, jeśli bufor jest pusty.
         """
         with self.monitor: # Automatyczne enter() i exit()
-            while len(self.buffer) == 0:
-                print(f"Bufor pusty. Proces {self.monitor.process_id} czeka na '{self.COND_NOT_EMPTY}'...")
+            # Operujemy na buffer_proxy
+            while len(self.buffer_proxy) == 0:
+                print(f"Bufor pusty ({len(self.buffer_proxy)}/{self.capacity}). Proces {self.monitor.process_id} czeka na '{self.COND_NOT_EMPTY}'...")
                 self.monitor.wait(self.COND_NOT_EMPTY)
             
-            item = self.buffer.popleft() # FIFO
-            # print(f"Proces {self.monitor.process_id} pobrał '{item}'. Bufor: {list(self.buffer)}")
+            item = self.buffer_proxy.pop(0) # Zakładając, że proxy ma metodę pop(0) dla FIFO
+            # print(f"Proces {self.monitor.process_id} pobrał '{item}'. Bufor: {list(self.buffer_proxy)}")
             self.monitor.signal(self.COND_NOT_FULL)
             return item
 

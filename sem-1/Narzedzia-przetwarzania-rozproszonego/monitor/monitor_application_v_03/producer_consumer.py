@@ -25,14 +25,16 @@ def producer_process(producer_id: int,
                      monitor_name: str, 
                      server_addr: str, 
                      buffer_cap: int, 
+                     shared_buffer_proxy, # Dodajemy współdzielony bufor jako argument
                      num_items: int, 
                      produced_items_list):
     """
     Proces producenta.
     """
     # Każdy proces tworzy własnego klienta monitora i BoundedBuffer
+    # ale BoundedBuffer używa teraz współdzielonego obiektu kolejki
     monitor_client = DistributedMonitor(monitor_name, server_addr)
-    bb_instance = BoundedBuffer(buffer_cap, monitor_client)
+    bb_instance = BoundedBuffer(buffer_cap, monitor_client, shared_buffer_proxy)
     print(f"Producent {producer_id} (PID: {current_process().pid}, Monitor Client PID: {bb_instance.monitor.process_id}) startuje...")
     for i in range(num_items):
         item = f"Item-{producer_id}-{i}"
@@ -48,13 +50,15 @@ def consumer_process(consumer_id: int,
                      monitor_name: str, 
                      server_addr: str, 
                      buffer_cap: int, 
+                     shared_buffer_proxy, # Dodajemy współdzielony bufor jako argument
                      num_items_to_consume: int, 
                      consumed_items_list):
     """
     Proces konsumenta.
     """
+    # Każdy proces tworzy własnego klienta monitora i BoundedBuffer
     monitor_client = DistributedMonitor(monitor_name, server_addr)
-    bb_instance = BoundedBuffer(buffer_cap, monitor_client)
+    bb_instance = BoundedBuffer(buffer_cap, monitor_client, shared_buffer_proxy)
     print(f"Konsument {consumer_id} (PID: {current_process().pid}, Monitor Client PID: {bb_instance.monitor.process_id}) startuje...")
     for _ in range(num_items_to_consume):
         time.sleep(random.uniform(0.2, 0.8)) # Symulacja konsumpcji
@@ -91,6 +95,7 @@ if __name__ == "__main__":
     manager = Manager()
     produced_items = manager.list()
     consumed_items = manager.list()
+    shared_actual_buffer = manager.list() # To będzie nasz współdzielony bufor (jako lista)
 
     processes = []
     total_items_to_produce = NUM_PRODUCERS * ITEMS_PER_PRODUCER
@@ -102,6 +107,7 @@ if __name__ == "__main__":
             MONITOR_NAME_BB, 
             SERVER_ADDRESS, 
             BUFFER_CAPACITY, 
+            shared_actual_buffer,
             ITEMS_PER_PRODUCER, 
             produced_items
         ))
@@ -120,6 +126,7 @@ if __name__ == "__main__":
             MONITOR_NAME_BB, 
             SERVER_ADDRESS, 
             BUFFER_CAPACITY, 
+            shared_actual_buffer,
             items_for_this_consumer, 
             consumed_items
         ))
