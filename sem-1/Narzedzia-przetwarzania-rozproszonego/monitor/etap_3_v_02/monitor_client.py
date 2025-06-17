@@ -184,7 +184,7 @@ class DistributedMonitor:
         }
         
         while True:
-            time.sleep(poll_interval)
+            time.sleep(self.poll_interval)
             response = self._send_request(check_request)
             
             if response.get("status") == "granted":
@@ -278,7 +278,7 @@ class DistributedMonitor:
         }
         
         while True:
-            time.sleep(poll_interval)
+            time.sleep(self.poll_interval)
             response = self._send_request(check_request)
             
             status = response.get("status")
