@@ -136,12 +136,12 @@ if __name__ == "__main__":
     # Definicje scenariuszy testowych
     # (liczba producentów, liczba konsumentów, elementy na producenta, pojemność bufora)
     scenarios = [
-        (1, 1, 1000, 10),    # Bazowy
-        (2, 2, 1000, 10),    # Skalowalność - więcej P/C
-        (4, 4, 1000, 10),    # Skalowalność - jeszcze więcej P/C
-        (2, 2, 5000, 10),    # Stres - więcej elementów
-        (2, 2, 1000, 5),     # Stres - mniejszy bufor (więcej blokowania)
-        (8, 8, 500, 20),     # Skalowalność - 8 P/C
+        (1, 1, 100, 10),    # Bazowy
+        (2, 2, 100, 10),    # Skalowalność - więcej P/C
+        (4, 4, 100, 10),    # Skalowalność - jeszcze więcej P/C
+        (2, 2, 500, 10),    # Stres - więcej elementów
+        (2, 2, 100, 5),     # Stres - mniejszy bufor (więcej blokowania)
+        (8, 8, 50, 20),     # Skalowalność - 8 P/C
         # Można dodać więcej scenariuszy
     ]
 
