@@ -83,11 +83,21 @@ def producer_consumer_test(buffer_type_str, num_producers, num_consumers, items_
     # Zarówno lokalny (wieloprocesowy) jak i rozproszony będą używać współdzielonej listy
     shared_actual_buffer = manager.list()
 
+    # Dla testów lokalnych, tworzymy jedną instancję LocalBoundedBuffer,
+    # która zawiera współdzielone Lock i Condition. Ta instancja zostanie przekazana do workerów.
+    # Dla testów rozproszonych, workerzy tworzą własne BoundedBuffer z własnymi klientami monitora,
+    # ale używają tego samego shared_actual_buffer jako proxy dla danych.
+    local_buffer_instance_to_share = None
+    if buffer_type_str == "local":
+        local_buffer_instance_to_share = LocalBoundedBuffer(capacity, shared_actual_buffer)
+
     # Producenci
     for i in range(num_producers):
         p = mp.Process(target=producer_worker, args=(
             buffer_type_str, capacity, items_per_producer, i, 
-            server_address, f"{monitor_name_prefix}_prodcons", shared_actual_buffer
+            server_address, f"{monitor_name_prefix}_prodcons", 
+            shared_actual_buffer,  # Używane przez BoundedBuffer (distributed) jako proxy
+            local_buffer_instance_to_share # Używane przez LocalBoundedBuffer workers
         ))
         processes.append(p)
         p.start()
@@ -100,7 +110,9 @@ def producer_consumer_test(buffer_type_str, num_producers, num_consumers, items_
         items_to_consume = items_per_consumer + (1 if i < extra_items else 0)
         p = mp.Process(target=consumer_worker, args=(
             buffer_type_str, capacity, items_to_consume, i,
-            server_address, f"{monitor_name_prefix}_prodcons", shared_actual_buffer
+            server_address, f"{monitor_name_prefix}_prodcons", 
+            shared_actual_buffer, # Używane przez BoundedBuffer (distributed) jako proxy
+            local_buffer_instance_to_share # Używane przez LocalBoundedBuffer workers
         ))
         processes.append(p)
         p.start()
@@ -108,39 +120,53 @@ def producer_consumer_test(buffer_type_str, num_producers, num_consumers, items_
     for p in processes:
         p.join()
 
-def producer_worker(buffer_type_str, capacity, num_items, producer_id, server_address, monitor_name, shared_buffer_proxy):
+def producer_worker(buffer_type_str, capacity, num_items, producer_id, 
+                    server_address, monitor_name, 
+                    data_store_proxy, # Dla BoundedBuffer (distributed)
+                    local_buffer_obj):  # Dla LocalBoundedBuffer (local)
+    
+    actual_buffer_to_use = None
+    monitor_client_for_dist = None # Potrzebne do zamknięcia
+
     if buffer_type_str == "distributed":
-        monitor = DistributedMonitor(monitor_name, server_address)
-        buffer = BoundedBuffer(capacity, monitor, shared_buffer_proxy)
+        monitor_client_for_dist = DistributedMonitor(monitor_name, server_address)
+        actual_buffer_to_use = BoundedBuffer(capacity, monitor_client_for_dist, data_store_proxy)
     else: # local
-        buffer = LocalBoundedBuffer(capacity, shared_buffer_proxy) # Przekazujemy shared_buffer_proxy
+        actual_buffer_to_use = local_buffer_obj # Używamy przekazanej, współdzielonej instancji
 
     for i in range(num_items):
         item = (producer_id, i)
-        buffer.put(item)
+        actual_buffer_to_use.put(item)
     
-    if buffer_type_str == "distributed":
-        monitor.close()
+    if buffer_type_str == "distributed" and monitor_client_for_dist:
+        monitor_client_for_dist.close()
 
-def consumer_worker(buffer_type_str, capacity, num_items, consumer_id, server_address, monitor_name, shared_buffer_proxy):
+def consumer_worker(buffer_type_str, capacity, num_items, consumer_id, 
+                    server_address, monitor_name, 
+                    data_store_proxy, # Dla BoundedBuffer (distributed)
+                    local_buffer_obj):  # Dla LocalBoundedBuffer (local)
+
+    actual_buffer_to_use = None
+    monitor_client_for_dist = None # Potrzebne do zamknięcia
+
     if buffer_type_str == "distributed":
-        monitor = DistributedMonitor(monitor_name, server_address)
-        buffer = BoundedBuffer(capacity, monitor, shared_buffer_proxy)
+        monitor_client_for_dist = DistributedMonitor(monitor_name, server_address)
+        actual_buffer_to_use = BoundedBuffer(capacity, monitor_client_for_dist, data_store_proxy)
     else: # local
-        buffer = LocalBoundedBuffer(capacity, shared_buffer_proxy) # Przekazujemy shared_buffer_proxy
+        actual_buffer_to_use = local_buffer_obj # Używamy przekazanej, współdzielonej instancji
 
     for _ in range(num_items):
-        buffer.get()
+        actual_buffer_to_use.get()
 
-    if buffer_type_str == "distributed":
-        monitor.close()
+    if buffer_type_str == "distributed" and monitor_client_for_dist:
+        monitor_client_for_dist.close()
 
 if __name__ == "__main__":
     num_runs = 3
     capacity = 10
     num_producers = 2
     num_consumers = 2
-    items_per_producer = 1000
+    items_per_producer = 100
     server_address = "tcp://localhost:5555"
     monitor_name_base = "perf_test_monitor"
 

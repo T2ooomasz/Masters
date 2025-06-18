@@ -52,7 +52,7 @@ class BoundedBuffer:
         with self.monitor: # Automatyczne enter() i exit()
             # Operujemy na buffer_proxy
             while len(self.buffer_proxy) == 0:
-                print(f"Bufor pusty ({len(self.buffer_proxy)}/{self.capacity}). Proces {self.monitor.process_id} czeka na '{self.COND_NOT_EMPTY}'...")
+                #print(f"Bufor pusty ({len(self.buffer_proxy)}/{self.capacity}). Proces {self.monitor.process_id} czeka na '{self.COND_NOT_EMPTY}'...")
                 self.monitor.wait(self.COND_NOT_EMPTY)
             
             item = self.buffer_proxy.pop(0) # Zakładając, że proxy ma metodę pop(0) dla FIFO
