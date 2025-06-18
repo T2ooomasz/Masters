@@ -18,8 +18,8 @@
 #include <sys/socket.h>     // Dla socket()
 #include <sys/ioctl.h>      // Dla ioctl()
 #include <linux/wireless.h> // Dla struct iwreq, IW_QUAL_DBM, etc.
-#include <linux/if.h>       // Dla struct ifreq, IFNAMSIZ, IFF_UP
-#include <net/if.h>         // Dla if_nametoindex (nieużywane bezpośrednio, ale związane z IFNAMSIZ)
+#include <net/if.h>         // Dla struct ifreq, IFNAMSIZ, if_nametoindex
+#include <linux/if.h>       // Dla flag IFF_UP i innych specyficznych dla Linuksa
 #include <math.h>           // Dla log10()
 #include <time.h>           // Dla nanosleep(), struct timespec
 #include <errno.h>          // Dla perror()
