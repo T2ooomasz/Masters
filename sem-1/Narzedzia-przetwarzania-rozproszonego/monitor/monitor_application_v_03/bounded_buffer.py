@@ -62,8 +62,8 @@ class BoundedBuffer:
 
     def is_full(self) -> bool: # Pomocnicza, używana w logice wait
         # Ta metoda powinna być wywoływana wewnątrz sekcji krytycznej monitora
-        return len(self.buffer) >= self.capacity
+        return len(self.buffer_proxy) >= self.capacity
 
     def is_empty(self) -> bool: # Pomocnicza, używana w logice wait
         # Ta metoda powinna być wywoływana wewnątrz sekcji krytycznej monitora
-        return len(self.buffer) == 0
+        return len(self.buffer_proxy) == 0
