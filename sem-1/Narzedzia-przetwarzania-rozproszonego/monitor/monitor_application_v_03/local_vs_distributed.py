@@ -35,19 +35,31 @@ class LocalBoundedBuffer:
         self.not_empty = mp.Condition(self.lock)
 
     def put(self, item):
+        # print(f"PID {os.getpid()} Local PUT: Trying for item {item}. Buf len: {len(self.buffer)}")
         with self.lock:
+            # print(f"PID {os.getpid()} Local PUT: Lock acquired for item {item}. Buf len: {len(self.buffer)}")
             while len(self.buffer) >= self.capacity:
+                # print(f"PID {os.getpid()} Local PUT: Buffer full, waiting on not_full. Buf len: {len(self.buffer)}")
                 self.not_full.wait()
+                # print(f"PID {os.getpid()} Local PUT: Awakened from not_full. Buf len: {len(self.buffer)}")
             self.buffer.append(item)
-            self.not_empty.notify() # Wystarczy notify, bo tylko jeden konsument może wziąć element
+            # print(f"PID {os.getpid()} Local PUT: Item {item} appended. Buf len: {len(self.buffer)}. Notifying not_empty.")
+            self.not_empty.notify_all() # Zmiana na notify_all dla większej pewności
+        # print(f"PID {os.getpid()} Local PUT: Lock released for item {item}")
 
     def get(self):
+        # print(f"PID {os.getpid()} Local GET: Trying to get item. Buf len: {len(self.buffer)}")
         with self.lock:
+            # print(f"PID {os.getpid()} Local GET: Lock acquired. Buf len: {len(self.buffer)}")
             while len(self.buffer) == 0:
+                # print(f"PID {os.getpid()} Local GET: Buffer empty, waiting on not_empty. Buf len: {len(self.buffer)}")
                 self.not_empty.wait()
+                # print(f"PID {os.getpid()} Local GET: Awakened from not_empty. Buf len: {len(self.buffer)}")
             item = self.buffer.pop(0)
-            self.not_full.notify() # Wystarczy notify, bo tylko jeden producent może dodać element
+            # print(f"PID {os.getpid()} Local GET: Item {item} popped. Buf len: {len(self.buffer)}. Notifying not_full.")
+            self.not_full.notify_all() # Zmiana na notify_all dla większej pewności
             return item
+        # print(f"PID {os.getpid()} Local GET: Lock released after getting item")
 
 def producer_consumer_test(buffer_type_str, num_producers, num_consumers, items_per_producer, capacity, server_address, monitor_name_prefix):
     """
