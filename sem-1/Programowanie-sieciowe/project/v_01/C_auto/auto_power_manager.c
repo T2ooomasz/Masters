@@ -46,16 +46,59 @@ void log_message(const char *message) {
  * @return 0 w przypadku sukcesu, -1 w przypadku błędu.
  */
 int execute_command_get_output(const char *command, char *buffer, size_t buffer_size) {
-    FILE *fp = popen(command, "r");
+    FILE *fp;
+    int command_exit_status;
+
+    if (buffer == NULL || buffer_size == 0) {
+        return -1; // Invalid buffer
+    }
+    buffer[0] = '\0'; // Ensure buffer is null-terminated and empty
+
+    fp = popen(command, "r");
     if (fp == NULL) {
-        perror("popen failed");
+        char err_msg[MAX_CMD_LEN + 60];
+        snprintf(err_msg, sizeof(err_msg), "popen failed for command: %s", command);
+        // perror appends the system error message (e.g., "No such file or directory" if 'iw' is not found)
+        perror(err_msg);
         return -1;
     }
-    if (fgets(buffer, buffer_size, fp) == NULL) {
-        pclose(fp);
-        return -1; // Brak wyjścia lub błąd odczytu
+
+    // Read the entire output into the buffer
+    char line[256];
+    size_t current_len = 0;
+    while (fgets(line, sizeof(line), fp) != NULL) {
+        if (current_len + strlen(line) < buffer_size) {
+            strcat(buffer, line);
+            current_len += strlen(line);
+        } else {
+            log_message("Warning: Command output truncated, buffer too small.");
+            // Read and discard the rest to allow pclose to work correctly
+            while(fgets(line, sizeof(line), fp) != NULL);
+            break;
+        }
     }
-    pclose(fp);
+
+    command_exit_status = pclose(fp);
+
+    if (command_exit_status == -1) {
+        char err_msg[MAX_CMD_LEN + 60];
+        snprintf(err_msg, sizeof(err_msg), "pclose failed for command: %s", command);
+        perror(err_msg);
+        return -1;
+    }
+
+    // Check if the command itself exited with an error
+    if (WIFEXITED(command_exit_status)) {
+        if (WEXITSTATUS(command_exit_status) != 0) {
+            // Command executed but returned a non-zero exit code (error)
+            // log_message("Command executed with non-zero status."); // Optional log
+            return -1; // Indicate command failure
+        }
+    } else {
+        // Command did not terminate normally (e.g., killed by a signal)
+        // log_message("Command did not terminate normally."); // Optional log
+        return -1;
+    }
     return 0;
 }
 
@@ -67,16 +110,32 @@ int get_signal_strength(const char *interface) {
     char cmd[MAX_CMD_LEN];
     char buf[MAX_BUF_LEN];
     snprintf(cmd, sizeof(cmd), "iw dev %s link", interface);
+    
+    // execute_command_get_output now fills buf with potentially multiple lines
+    // and returns 0 on command success (exit code 0), -1 on failure.
+    if (execute_command_get_output(cmd, buf, sizeof(buf)) != 0) {
+        // This means popen failed, pclose failed, or the 'iw' command returned a non-zero status.
+        // log_message("Debug: get_signal_strength - execute_command_get_output failed or command error.");
+        return INT_MIN;
+    }
 
-    if (execute_command_get_output(cmd, buf, sizeof(buf)) != 0 || strstr(buf, "Not connected")) {
-        return INT_MIN; // Błąd lub interfejs nie jest połączony
+    // Check if the interface is connected. This string appears in `iw` output.
+    if (strstr(buf, "Not connected")) {
+        // log_message("Debug: get_signal_strength - Interface not connected.");
+        return INT_MIN; 
     }
 
     char *signal_ptr = strstr(buf, "signal:");
     if (signal_ptr) {
         int signal_dbm = 0;
-        // Parsuje wartość numeryczną po "signal: "
-        if (sscanf(signal_ptr, "signal: %d dBm", &signal_dbm) == 1) {
+        // Advance pointer past "signal:" and skip any leading whitespace before the number
+        char *value_start = signal_ptr + strlen("signal:");
+        while (*value_start == ' ' || *value_start == '\t') {
+            value_start++;
+        }
+        
+        // Parse the integer value. %d will stop at the first non-digit (e.g., 'd' in "dBm" or a space).
+        if (sscanf(value_start, "%d", &signal_dbm) == 1) {
             return signal_dbm;
         }
     }
