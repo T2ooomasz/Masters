@@ -1,7 +1,7 @@
 {
 	"info": {
 		"_postman_id": "a1b2c3d4-e5f6-a7b8-c9d0-f1a2b3c4d5e6",
-		"name": "Projekt II: REST API Biblioteka",
+		"name": "Projekt II: REST API Biblioteka (z Logowaniem)",
 		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
 	},
 	"item": [
@@ -15,10 +15,16 @@
 							"listen": "test",
 							"script": {
 								"exec": [
+									"// --- Testy ---",
 									"pm.test(\"Status code is 201 Created\", function () {",
 									"    pm.response.to.have.status(201);",
 									"});",
-									"pm.collectionVariables.set(\"authorId\", pm.response.json().id);"
+									"pm.collectionVariables.set(\"authorId\", pm.response.json().id);",
+									"",
+									"// --- Logowanie ---",
+									"console.log(\"Request URL:\", pm.request.url.toString());",
+									"console.log(\"Response Status:\", pm.response.code, pm.response.status);",
+									"console.log(\"Response Body:\", pm.response.text());"
 								],
 								"type": "text/javascript"
 							}
@@ -51,6 +57,20 @@
 				},
 				{
 					"name": "Get Author by ID",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"// --- Logowanie ---",
+									"console.log(\"Request URL:\", pm.request.url.toString());",
+									"console.log(\"Response Status:\", pm.response.code, pm.response.status);",
+									"console.log(\"Response Body:\", pm.response.text());"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
 					"request": {
 						"method": "GET",
 						"header": [],
@@ -70,6 +90,20 @@
 				},
 				{
 					"name": "Update Author",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"// --- Logowanie ---",
+									"console.log(\"Request URL:\", pm.request.url.toString());",
+									"console.log(\"Response Status:\", pm.response.code, pm.response.status);",
+									"console.log(\"Response Body:\", pm.response.text());"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
 					"request": {
 						"method": "PUT",
 						"header": [],
@@ -97,6 +131,20 @@
 				},
 				{
 					"name": "Delete Author",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"// --- Logowanie ---",
+									"console.log(\"Request URL:\", pm.request.url.toString());",
+									"console.log(\"Response Status:\", pm.response.code, pm.response.status);",
+									"console.log(\"Response Body:\", pm.response.text());"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
 					"request": {
 						"method": "DELETE",
 						"header": [],
@@ -120,6 +168,20 @@
 			"item": [
 				{
 					"name": "Get Books (Paginated)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"// --- Logowanie ---",
+									"console.log(\"Request URL:\", pm.request.url.toString());",
+									"console.log(\"Response Status:\", pm.response.code, pm.response.status);",
+									"console.log(\"Response Body:\", pm.response.text());"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
 					"request": {
 						"method": "GET",
 						"header": [],
@@ -152,10 +214,16 @@
 							"listen": "test",
 							"script": {
 								"exec": [
+									"// --- Testy ---",
 									"pm.test(\"ETag exists\", function () {",
 									"    pm.response.to.have.header(\"ETag\");",
 									"});",
-									"pm.collectionVariables.set(\"bookEtag\", pm.response.headers.get('ETag'));"
+									"pm.collectionVariables.set(\"bookEtag\", pm.response.headers.get('ETag'));",
+									"",
+									"// --- Logowanie ---",
+									"console.log(\"Request URL:\", pm.request.url.toString());",
+									"console.log(\"Response Status:\", pm.response.code, pm.response.status);",
+									"console.log(\"Response Body:\", pm.response.text());"
 								],
 								"type": "text/javascript"
 							}
@@ -179,6 +247,20 @@
 				},
 				{
 					"name": "Update Book (Success with ETag)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"// --- Logowanie ---",
+									"console.log(\"Request URL:\", pm.request.url.toString());",
+									"console.log(\"Response Status:\", pm.response.code, pm.response.status);",
+									"console.log(\"Response Body:\", pm.response.text());"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
 					"request": {
 						"method": "PUT",
 						"header": [
@@ -212,6 +294,20 @@
 				},
 				{
 					"name": "Update Book (Fail - Stale ETag)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"// --- Logowanie ---",
+									"console.log(\"Request URL:\", pm.request.url.toString());",
+									"console.log(\"Response Status:\", pm.response.code, pm.response.status);",
+									"console.log(\"Response Body:\", pm.response.text());"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
 					"request": {
 						"method": "PUT",
 						"header": [
@@ -250,6 +346,20 @@
 			"item": [
 				{
 					"name": "Create Order (First time)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"// --- Logowanie ---",
+									"console.log(\"Request URL:\", pm.request.url.toString());",
+									"console.log(\"Response Status:\", pm.response.code, pm.response.status);",
+									"console.log(\"Response Body:\", pm.response.text());"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
 					"request": {
 						"method": "POST",
 						"header": [
@@ -282,6 +392,20 @@
 				},
 				{
 					"name": "Create Order (Duplicate)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"// --- Logowanie ---",
+									"console.log(\"Request URL:\", pm.request.url.toString());",
+									"console.log(\"Response Status:\", pm.response.code, pm.response.status);",
+									"console.log(\"Response Body:\", pm.response.text());"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
 					"request": {
 						"method": "POST",
 						"header": [
@@ -320,6 +444,20 @@
 			"item": [
 				{
 					"name": "Bulk Update Books",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"// --- Logowanie ---",
+									"console.log(\"Request URL:\", pm.request.url.toString());",
+									"console.log(\"Response Status:\", pm.response.code, pm.response.status);",
+									"console.log(\"Response Body:\", pm.response.text());"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
 					"request": {
 						"method": "POST",
 						"header": [],
