@@ -143,6 +143,7 @@
                 this.renderGame(ballX, ballY, paddle1Y, paddle2Y, score1, score2);
             }
             
+            // Optymalizacja TODO: nie rysować wszystkiego za każdym razem, tylko zmianę
             renderGame(ballX, ballY, paddle1Y, paddle2Y, score1, score2) {
                 // Wyczyść canvas
                 this.context.clearRect(0, 0, this.canvas.width, this.canvas.height);
