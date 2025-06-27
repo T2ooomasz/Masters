@@ -68,26 +68,49 @@
 
             connect() {
                 try {
-                    this.ws = new WebSocket('ws://localhost:8765');
+                    this.ws = new WebSocket('ws://localhost:8765');                    
+                    this.ws.binaryType = 'arraybuffer'; // Kluczowe dla obsługi danych binarnych
                     
                     this.ws.onopen = () => {
                         this.updateStatus('Połączono - szukanie gry...', 'connected');
                         this.reconnectAttempts = 0;
-                        // Wysyłamy żądanie dołączenia/ponownego dołączenia do gry
-                        this.ws.send(JSON.stringify({ 
-                            type: 'join', 
-                            player_id: this.playerId 
-                        }));
+                        
+                        // Wysyłamy binarną wiadomość 'join'
+                        const encoder = new TextEncoder();
+                        const payload = encoder.encode(this.playerId);
+                        const message = new Uint8Array(1 + payload.length);
+                        message[0] = 1; // C2S_JOIN
+                        message.set(payload, 1);
+                        this.ws.send(message);
                     };
 
                     this.ws.onmessage = (event) => {
-                        if (typeof event.data === 'string') {
-                            // Wiadomości tekstowe (informacje o stanie połączenia)
-                            const data = JSON.parse(event.data);
-                            this.handleTextMessage(data);
-                        } else {
-                            // Dane binarne (stan gry)
-                            this.handleGameState(event.data);
+                        const data = event.data; // To jest ArrayBuffer
+                        const view = new DataView(data);
+                        if (view.byteLength === 0) return;
+
+                        const opcode = view.getUint8(0);
+
+                        switch (opcode) {
+                            case 10: // S2C_WAITING_FOR_PLAYER
+                                const gameIdWait = view.getInt16(1, true);
+                                this.updateStatus(`Oczekiwanie na drugiego gracza w grze #${gameIdWait}...`, 'connected');
+                                break;
+                            case 11: // S2C_GAME_JOINED
+                                const gameIdJoin = view.getInt16(1, true);
+                                const playerNumber = view.getUint8(3);
+                                this.updateStatus(`W grze #${gameIdJoin} jako gracz ${playerNumber}`, 'connected');
+                                break;
+                            case 12: // S2C_GAME_STARTED
+                                this.updateStatus('Gra rozpoczęta!', 'connected');
+                                break;
+                            case 13: // S2C_GAME_STATE
+                                this.renderFromBuffer(view);
+                                break;
+                            case 14: // S2C_ERROR_GAME_FULL
+                                this.updateStatus('Nie udało się dołączyć: gra jest pełna.', 'disconnected');
+                                this.ws.close();
+                                break;
                         }
                     };
 
@@ -108,41 +131,18 @@
                 }
             }
 
-            handleTextMessage(data) {
-                switch (data.type) {
-                    case 'game_joined':
-                        this.updateStatus(`W grze #${data.game_id} jako gracz ${data.player_number}`, 'connected');
-                        break;
-                    case 'waiting_for_player':
-                        this.updateStatus('Oczekiwanie na drugiego gracza...', 'connected');
-                        break;
-                    case 'game_started':
-                        this.updateStatus('Gra rozpoczęta!', 'connected');
-                        break;
-                    case 'player_reconnected':
-                        this.updateStatus('Ponownie połączono z grą', 'connected');
-                        break;
-                }
+            renderFromBuffer(view) {
+                // Opcode (1B) + ballX (4B) + ballY (4B) + paddle1Y (4B) + paddle2Y (4B) + score1 (2B) + score2 (2B)
+                const ballX = view.getFloat32(1, true);
+                const ballY = view.getFloat32(5, true);
+                const paddle1Y = view.getFloat32(9, true);
+                const paddle2Y = view.getFloat32(13, true);
+                const score1 = view.getInt16(17, true);
+                const score2 = view.getInt16(19, true);
+
+                this.renderGame(ballX, ballY, paddle1Y, paddle2Y, score1, score2);
             }
-
-            handleGameState(data) {
-                const reader = new FileReader();
-                reader.onload = () => {
-                    const view = new DataView(reader.result);
-                    if (view.getUint8(0) === 2) {
-                        const ballX = view.getFloat32(1, true);
-                        const ballY = view.getFloat32(5, true);
-                        const paddle1Y = view.getFloat32(9, true);
-                        const paddle2Y = view.getFloat32(13, true);
-                        const score1 = view.getInt16(17, true);
-                        const score2 = view.getInt16(19, true);
-
-                        this.renderGame(ballX, ballY, paddle1Y, paddle2Y, score1, score2);
-                    }
-                };
-                reader.readAsArrayBuffer(data);
-            }
-
+            
             renderGame(ballX, ballY, paddle1Y, paddle2Y, score1, score2) {
                 // Wyczyść canvas
                 this.context.clearRect(0, 0, this.canvas.width, this.canvas.height);
@@ -204,11 +204,10 @@
 
             sendInput(direction) {
                 if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-                    this.ws.send(JSON.stringify({ 
-                        type: 'input', 
-                        player_id: this.playerId, 
-                        direction 
-                    }));
+                    // 0: góra, 1: dół
+                    const directionCode = direction === 'down' ? 1 : 0;
+                    const message = new Uint8Array([2, directionCode]); // C2S_INPUT
+                    this.ws.send(message);
                 }
             }
 

@@ -18,6 +18,17 @@ CANVAS_HEIGHT = 600
 PADDLE_HEIGHT = 50
 PADDLE_WIDTH = 10
 
+# Definicje typów wiadomości binarnych
+# Klient -> Serwer
+C2S_JOIN = 1
+C2S_INPUT = 2
+# Serwer -> Klient
+S2C_WAITING_FOR_PLAYER = 10
+S2C_GAME_JOINED = 11
+S2C_GAME_STARTED = 12
+S2C_GAME_STATE = 13
+S2C_ERROR_GAME_FULL = 14
+
 class Player:
     def __init__(self, player_id: str, websocket, player_number: int):
         self.player_id = player_id
@@ -25,14 +36,6 @@ class Player:
         self.player_number = player_number  # 1 lub 2
         self.connected = True
         self.last_seen = time.time()
-    
-    async def send_message(self, message: dict):
-        """Wysyła wiadomość tekstową do gracza."""
-        if self.connected and self.websocket:
-            try:
-                await self.websocket.send(json.dumps(message))
-            except websockets.exceptions.ConnectionClosed:
-                self.connected = False
     
     async def send_binary(self, data: bytes):
         """Wysyła dane binarne do gracza."""
@@ -169,8 +172,8 @@ class Game:
     async def send_state_to_players(self):
         """Wysyła stan gry do wszystkich połączonych graczy."""
         # Pakowanie stanu gry do formatu binarnego
-        buffer = struct.pack("<Bffffhh", 
-                           2,  # Typ wiadomości
+        buffer = struct.pack("<Bffffhh",
+                           S2C_GAME_STATE,
                            self.state["ball_x"], 
                            self.state["ball_y"],
                            self.state["paddle1_y"], 
@@ -192,7 +195,7 @@ class Game:
         if not player.connected:
             return
         
-        move_amount = PADDLE_SPEED if direction == "down" else -PADDLE_SPEED
+        move_amount = PADDLE_SPEED if direction == "down" else -PADDLE_SPEED # up: 0, down: 1
         
         if player.player_number == 1:
             self.state["paddle1_y"] += move_amount
@@ -200,13 +203,6 @@ class Game:
             self.state["paddle2_y"] += move_amount
         
         player.last_seen = time.time()
-
-    async def notify_players(self, message_type: str, **kwargs):
-        """Wysyła wiadomość tekstową do wszystkich graczy."""
-        message = {"type": message_type, **kwargs}
-        for player in self.players.values():
-            if player.connected:
-                await player.send_message(message)
 
 class GameManager:
     def __init__(self):
@@ -249,18 +245,16 @@ class GameManager:
         
         # Powiadom gracza o dołączeniu
         if player_id in game.players and len(game.players) == 1:
-            await game.players[player_id].send_message({
-                "type": "waiting_for_player",
-                "game_id": game.id
-            })
+            # Gracz 1, czeka na przeciwnika
+            msg = struct.pack("<Bh", S2C_WAITING_FOR_PLAYER, game.id)
+            await game.players[player_id].send_binary(msg)
         else:
-            await game.players[player_id].send_message({
-                "type": "game_joined",
-                "game_id": game.id,
-                "player_number": player_number
-            })
+            # Gracz 2 dołączył
+            msg = struct.pack("<BhB", S2C_GAME_JOINED, game.id, player_number)
+            await game.players[player_id].send_binary(msg)
         
-        # Jeśli gra ma 2 graczy i nie jest uruchomiona, uruchom ją
+        # Jeśli gra ma 2 graczy i nie jest uruchomiona, uruchom ją.
+        # Drugi gracz, który dołączył, wywoła start gry.
         if len(game.players) == 2 and not game.running:
             await self.start_game(game)
         
@@ -272,7 +266,11 @@ class GameManager:
             return
         
         game.running = True
-        await game.notify_players("game_started")
+        # Powiadom obu graczy o starcie gry
+        msg = struct.pack("<B", S2C_GAME_STARTED)
+        for player in game.players.values():
+            if player.connected:
+                await player.send_binary(msg)
         
         async def game_loop():
             try:
@@ -318,25 +316,42 @@ game_manager = GameManager()
 async def handle_client(websocket, path):
     """Obsługuje połączenia WebSocket od klientów."""
     player_id = None
+    game = None
     try:
         async for message in websocket:
-            data = json.loads(message)
-            
-            if data["type"] == "join":
-                player_id = data["player_id"]
-                game = await game_manager.add_player_to_game(player_id, websocket)
-                if game is None:
-                    await websocket.send(json.dumps({"type": "error", "message": "Game is full"}))
-                    break
-            
-            elif data["type"] == "input":
-                input_player_id = data["player_id"]
-                direction = data["direction"]
+            if not isinstance(message, bytes) or len(message) == 0:
+                continue
+
+            opcode = message[0]
+
+            if opcode == C2S_JOIN:
+                if player_id is not None: # Gracz próbuje dołączyć ponownie na tym samym połączeniu
+                    continue
                 
-                if input_player_id in game_manager.player_to_game:
-                    game_id = game_manager.player_to_game[input_player_id]
-                    if game_id in game_manager.games:
-                        game_manager.games[game_id].handle_input(input_player_id, direction)
+                try:
+                    # Reszta wiadomości to player_id
+                    pid = message[1:].decode('utf-8')
+                    game = await game_manager.add_player_to_game(pid, websocket)
+                    if game is None:
+                        # Gra jest pełna
+                        await websocket.send(struct.pack("<B", S2C_ERROR_GAME_FULL))
+                        break
+                    else:
+                        player_id = pid # Pomyślnie dołączono, zapisz player_id dla tego połączenia
+                except UnicodeDecodeError:
+                    logger.warning("Otrzymano nieprawidłową wiadomość 'join'.")
+                    break
+
+            elif opcode == C2S_INPUT:
+                if player_id is None or len(message) != 2: # Musi najpierw dołączyć
+                    continue
+                
+                # Rozpakuj kierunek (0: góra, 1: dół)
+                _, direction_code = struct.unpack("<BB", message)
+                direction = "down" if direction_code == 1 else "up"
+
+                if game:
+                    game.handle_input(player_id, direction)
     
     except websockets.exceptions.ConnectionClosed:
         pass
