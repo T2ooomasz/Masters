@@ -296,7 +296,7 @@ def paginate_data(data_dict, page, limit):
     }
 
 # =============================================================================
-# KOLEKCJA KSIĄŻEK ZE STRONICOWANIEM - ETAP 4
+# KOLEKCJA KSIĄŻEK ZE STRONICOWANIEM
 # =============================================================================
 
 @app.route('/api/v1/books', methods=['GET', 'POST'])
