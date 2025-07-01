@@ -626,8 +626,15 @@
 									"script": {
 										"exec": [
 											"// Generujemy unikalny klucz dla tej operacji i zapisujemy go",
-											"// aby móc go użyć w kolejnym, zduplikowanym żądaniu.",
-											"pm.collectionVariables.set(\"idempotencyKey\", pm.variables.replaceIn('{{$guid}}'));"
+										"// aby móc go użyć w kolejnym, zduplikowanym żądaniu.",
+										"// Używamy funkcji JS, co jest bardziej niezawodne niż zmienne dynamiczne Postmana.",
+										"function uuidv4() {",
+										"  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {",
+										"    var r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);",
+										"    return v.toString(16);",
+										"  });",
+										"}",
+										"pm.collectionVariables.set(\"idempotencyKey\", uuidv4());"
 										],
 										"type": "text/javascript"
 									}
@@ -750,7 +757,13 @@
 									"script": {
 										"exec": [
 											"// Generujemy NOWY, unikalny klucz dla tej nowej operacji.",
-											"pm.collectionVariables.set(\"idempotencyKey\", pm.variables.replaceIn('{{$guid}}'));"
+											"function uuidv4() {",
+											"  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {",
+											"    var r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);",
+											"    return v.toString(16);",
+											"  });",
+											"}",
+											"pm.collectionVariables.set(\"idempotencyKey\", uuidv4());"
 										],
 										"type": "text/javascript"
 									}

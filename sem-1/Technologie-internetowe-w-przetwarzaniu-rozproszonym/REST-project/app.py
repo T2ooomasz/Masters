@@ -518,10 +518,29 @@ def orders_collection():
             cached_response = idempotency_keys[idempotency_key]
             response = jsonify(cached_response["data"])
             return response, cached_response["status"]
-        
-        data = request.json
-        if not data:
-            return jsonify({"error": "Order data is required"}), 400
+
+        try:
+            data = request.get_json()
+        except Exception:
+            return create_error_response("Invalid JSON", 400)
+
+        if not data or not isinstance(data, dict):
+            return create_error_response("Invalid JSON payload", 400)
+
+        # Walidacja danych wejściowych zamówienia
+        book_id = data.get('bookId')
+        quantity = data.get('quantity')
+
+        if not book_id or book_id not in books:
+            return create_error_response("Not Found", 404, f"Book with id '{book_id}' not found.")
+
+        if not isinstance(quantity, int) or quantity <= 0:
+            return create_error_response("Validation error", 400, "Field 'quantity' must be a positive integer.")
+
+        # Logika biznesowa (np. sprawdzanie dostępności książek)
+        if books[book_id]['copies'] < quantity:
+            return create_error_response("Insufficient stock", 409, 
+                                       f"Not enough copies of '{books[book_id]['title']}'. Available: {books[book_id]['copies']}")
         
         order_id = str(uuid.uuid4())
         order = {
@@ -530,6 +549,8 @@ def orders_collection():
             "status": "created",
             "created_at": datetime.now().isoformat()
         }
+        # Zmniejszenie liczby dostępnych kopii
+        books[book_id]['copies'] -= quantity
         orders[order_id] = order
         
         # Zapisanie w cache idempotencji
