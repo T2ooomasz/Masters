@@ -565,8 +565,14 @@ def bulk_update():
     # należałoby użyć transakcji.
     for book_id in book_ids:
         if book_id in books:
-            # Zastosuj aktualizacje
-            books[book_id].update(updates)
+            # Kopiujemy dane do aktualizacji, aby zapobiec modyfikacji kluczowych pól
+            safe_updates = updates.copy()
+            safe_updates.pop('id', None)
+            safe_updates.pop('created_at', None)
+
+            # Zastosuj bezpieczne aktualizacje i zaktualizuj datę modyfikacji
+            books[book_id].update(safe_updates)
+            books[book_id]['updated_at'] = datetime.now().isoformat()
             # Zaktualizuj ETag po zmianie danych
             books[book_id]['etag'] = generate_etag(books[book_id])
             updated_books.append(books[book_id])
