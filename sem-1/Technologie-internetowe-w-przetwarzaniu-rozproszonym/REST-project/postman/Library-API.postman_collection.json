@@ -1,7 +1,7 @@
 {
 	"info": {
 		"_postman_id": "a1b2c3d4-e5f6-a7b8-c9d0-f1a2b3c4d5e6",
-		"name": "Projekt II: REST API Biblioteka (z Logowaniem)",
+		"name": "Projekt II: REST API Biblioteka",
 		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
 	},
 	"item": [
@@ -9,15 +9,52 @@
 			"name": "1. Authors (CRUD)",
 			"item": [
 				{
-					"name": "Create Author",
+					"name": "List All Authors",
 					"event": [
 						{
 							"listen": "test",
 							"script": {
 								"exec": [
 									"// --- Testy ---",
-									"pm.test(\"Status code is 201 Created\", function () {",
+									"pm.test(\"Status code is 200 OK\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"// --- Logowanie ---",
+									"console.log(\"Request URL:\", pm.request.url.toString());",
+									"console.log(\"Response Status:\", pm.response.code, pm.response.status);",
+									"console.log(\"Response Body:\", pm.response.text());"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/authors",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"authors"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Create New Author",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"// --- Testy ---",
+									"pm.test(\"Status code is 201 Created and Location header is present\", function () {",
 									"    pm.response.to.have.status(201);",
+									"    pm.response.to.have.header(\"Location\");",
 									"});",
 									"pm.collectionVariables.set(\"authorId\", pm.response.json().id);",
 									"",
@@ -35,7 +72,7 @@
 						"header": [],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n    \"name\": \"Andrzej Sapkowski\"\n}",
+							"raw": "{\n    \"name\": \"Stanisław Lem\",\n    \"birth_year\": 1921,\n    \"bio\": \"Polish science fiction writer, philosopher, and futurologist.\"\n}",
 							"options": {
 								"raw": {
 									"language": "json"
@@ -62,6 +99,14 @@
 							"listen": "test",
 							"script": {
 								"exec": [
+									"// --- Testy ---",
+									"pm.test(\"Status code is 200 OK\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"pm.test(\"Response contains ETag header\", function () {",
+									"    pm.response.to.have.header(\"ETag\");",
+									"});",
+									"",
 									"// --- Logowanie ---",
 									"console.log(\"Request URL:\", pm.request.url.toString());",
 									"console.log(\"Response Status:\", pm.response.code, pm.response.status);",
@@ -89,12 +134,17 @@
 					"response": []
 				},
 				{
-					"name": "Update Author",
+					"name": "Update Author (PUT - Full Update)",
 					"event": [
 						{
 							"listen": "test",
 							"script": {
 								"exec": [
+									"// --- Testy ---",
+									"pm.test(\"Status code is 200 OK\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
 									"// --- Logowanie ---",
 									"console.log(\"Request URL:\", pm.request.url.toString());",
 									"console.log(\"Response Status:\", pm.response.code, pm.response.status);",
@@ -109,7 +159,53 @@
 						"header": [],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n    \"name\": \"Andrzej Sapkowski\",\n    \"birth_year\": 1948\n}",
+							"raw": "{\n    \"name\": \"Stanisław Lem\",\n    \"birth_year\": 1921,\n    \"bio\": \"Renowned Polish science fiction writer, philosopher, and futurologist.\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/authors/{{authorId}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"authors",
+								"{{authorId}}"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Partially Update Author (PATCH)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"// --- Testy ---",
+									"pm.test(\"Status code is 200 OK\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"// --- Logowanie ---",
+									"console.log(\"Request URL:\", pm.request.url.toString());",
+									"console.log(\"Response Status:\", pm.response.code, pm.response.status);",
+									"console.log(\"Response Body:\", pm.response.text());"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "PATCH",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"bio\": null\n}",
 							"options": {
 								"raw": {
 									"language": "json"
@@ -136,6 +232,11 @@
 							"listen": "test",
 							"script": {
 								"exec": [
+									"// --- Testy ---",
+									"pm.test(\"Status code is 204 No Content\", function () {",
+									"    pm.response.to.have.status(204);",
+									"});",
+									"",
 									"// --- Logowanie ---",
 									"console.log(\"Request URL:\", pm.request.url.toString());",
 									"console.log(\"Response Status:\", pm.response.code, pm.response.status);",
@@ -164,7 +265,7 @@
 			]
 		},
 		{
-			"name": "2. Books (Pagination & Lost Update)",
+			"name": "2. Books (Pagination & Conditional Updates)",
 			"item": [
 				{
 					"name": "Get Books (Paginated)",
@@ -173,52 +274,13 @@
 							"listen": "test",
 							"script": {
 								"exec": [
-									"// --- Logowanie ---",
-									"console.log(\"Request URL:\", pm.request.url.toString());",
-									"console.log(\"Response Status:\", pm.response.code, pm.response.status);",
-									"console.log(\"Response Body:\", pm.response.text());"
-								],
-								"type": "text/javascript"
-							}
-						}
-					],
-					"request": {
-						"method": "GET",
-						"header": [],
-						"url": {
-							"raw": "{{baseUrl}}/books?page=1&limit=1",
-							"host": [
-								"{{baseUrl}}"
-							],
-							"path": [
-								"books"
-							],
-							"query": [
-								{
-									"key": "page",
-									"value": "1"
-								},
-								{
-									"key": "limit",
-									"value": "1"
-								}
-							]
-						}
-					},
-					"response": []
-				},
-				{
-					"name": "Get Book to retrieve ETag",
-					"event": [
-						{
-							"listen": "test",
-							"script": {
-								"exec": [
 									"// --- Testy ---",
-									"pm.test(\"ETag exists\", function () {",
-									"    pm.response.to.have.header(\"ETag\");",
+									"pm.test(\"Status code is 200 OK\", function () {",
+									"    pm.response.to.have.status(200);",
 									"});",
-									"pm.collectionVariables.set(\"bookEtag\", pm.response.headers.get('ETag'));",
+									"pm.test(\"Response contains Link header\", function () {",
+									"    pm.response.to.have.header(\"Link\");",
+									"});",
 									"",
 									"// --- Logowanie ---",
 									"console.log(\"Request URL:\", pm.request.url.toString());",
@@ -233,209 +295,522 @@
 						"method": "GET",
 						"header": [],
 						"url": {
-							"raw": "{{baseUrl}}/books/1",
+							"raw": "{{baseUrl}}/books?page=1&limit=2",
 							"host": [
 								"{{baseUrl}}"
 							],
 							"path": [
-								"books",
-								"1"
+								"books"
+							],
+							"query": [
+								{
+									"key": "page",
+									"value": "1"
+								},
+								{
+									"key": "limit",
+									"value": "2"
+								}
 							]
 						}
 					},
 					"response": []
 				},
 				{
-					"name": "Update Book (Success with ETag)",
-					"event": [
+					"name": "Scenario: Create and Manage a Book",
+					"item": [
 						{
-							"listen": "test",
-							"script": {
-								"exec": [
-									"// --- Logowanie ---",
-									"console.log(\"Request URL:\", pm.request.url.toString());",
-									"console.log(\"Response Status:\", pm.response.code, pm.response.status);",
-									"console.log(\"Response Body:\", pm.response.text());"
-								],
-								"type": "text/javascript"
-							}
-						}
-					],
-					"request": {
-						"method": "PUT",
-						"header": [
-							{
-								"key": "If-Match",
-								"value": "{{bookEtag}}",
-								"type": "text"
-							}
-						],
-						"body": {
-							"mode": "raw",
-							"raw": "{\n    \"id\": \"1\",\n    \"title\": \"Hobbit (Wersja zaktualizowana)\",\n    \"copies\": 8,\n    \"etag\": \"v1\"\n}",
-							"options": {
-								"raw": {
-									"language": "json"
+							"name": "1. Create New Book",
+							"event": [
+								{
+									"listen": "test",
+									"script": {
+										"exec": [
+											"pm.test(\"Status code is 201 Created\", function () {",
+											"    pm.response.to.have.status(201);",
+											"});",
+											"pm.collectionVariables.set(\"bookId\", pm.response.json().id);",
+											"",
+											"// --- Logowanie ---",
+											"console.log(\"Request URL:\", pm.request.url.toString());",
+											"console.log(\"Response Status:\", pm.response.code, pm.response.status);",
+											"console.log(\"Response Body:\", pm.response.text());"
+										],
+										"type": "text/javascript"
+									}
 								}
-							}
-						},
-						"url": {
-							"raw": "{{baseUrl}}/books/1",
-							"host": [
-								"{{baseUrl}}"
 							],
-							"path": [
-								"books",
-								"1"
-							]
-						}
-					},
-					"response": []
-				},
-				{
-					"name": "Update Book (Fail - Stale ETag)",
-					"event": [
+							"request": {
+								"method": "POST",
+								"header": [],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"title\": \"Solaris\",\n    \"author_id\": \"{{authorId}}\",\n    \"copies\": 10,\n    \"publication_year\": 1961\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{baseUrl}}/books",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"books"
+									]
+								}
+							},
+							"response": []
+						},
 						{
-							"listen": "test",
-							"script": {
-								"exec": [
-									"// --- Logowanie ---",
-									"console.log(\"Request URL:\", pm.request.url.toString());",
-									"console.log(\"Response Status:\", pm.response.code, pm.response.status);",
-									"console.log(\"Response Body:\", pm.response.text());"
-								],
-								"type": "text/javascript"
-							}
-						}
-					],
-					"request": {
-						"method": "PUT",
-						"header": [
-							{
-								"key": "If-Match",
-								"value": "\"stary-lub-zly-etag\"",
-								"type": "text"
-							}
-						],
-						"body": {
-							"mode": "raw",
-							"raw": "{\n    \"id\": \"1\",\n    \"title\": \"Hobbit (Nieudana próba)\",\n    \"copies\": 1,\n    \"etag\": \"v1\"\n}",
-							"options": {
-								"raw": {
-									"language": "json"
+							"name": "2. Get Book by ID (and save ETag)",
+							"event": [
+								{
+									"listen": "test",
+									"script": {
+										"exec": [
+											"// --- Testy ---",
+											"pm.test(\"Status code is 200 OK\", function () {",
+											"    pm.response.to.have.status(200);",
+											"});",
+											"pm.test(\"ETag exists\", function () {",
+											"    pm.response.to.have.header(\"ETag\");",
+											"});",
+											"pm.collectionVariables.set(\"bookEtag\", pm.response.headers.get('ETag'));",
+											"",
+											"// --- Logowanie ---",
+											"console.log(\"Request URL:\", pm.request.url.toString());",
+											"console.log(\"Response Status:\", pm.response.code, pm.response.status);",
+											"console.log(\"Response Body:\", pm.response.text());"
+										],
+										"type": "text/javascript"
+									}
 								}
-							}
-						},
-						"url": {
-							"raw": "{{baseUrl}}/books/1",
-							"host": [
-								"{{baseUrl}}"
 							],
-							"path": [
-								"books",
-								"1"
-							]
+							"request": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{baseUrl}}/books/{{bookId}}",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"books",
+										"{{bookId}}"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "3. Update Book (PUT) - Success",
+							"event": [
+								{
+									"listen": "test",
+									"script": {
+										"exec": [
+											"// --- Testy ---",
+											"pm.test(\"Status code is 200 OK\", function () {",
+											"    pm.response.to.have.status(200);",
+											"});",
+											"// Save the new ETag for the next request",
+											"pm.collectionVariables.set(\"bookEtag\", pm.response.headers.get('ETag'));",
+											"",
+											"// --- Logowanie ---",
+											"console.log(\"Request URL:\", pm.request.url.toString());",
+											"console.log(\"Response Status:\", pm.response.code, pm.response.status);",
+											"console.log(\"Response Body:\", pm.response.text());"
+										],
+										"type": "text/javascript"
+									}
+								}
+							],
+							"request": {
+								"method": "PUT",
+								"header": [
+									{
+										"key": "If-Match",
+										"value": "{{bookEtag}}",
+										"type": "text"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"title\": \"Solaris\",\n    \"author_id\": \"{{authorId}}\",\n    \"copies\": 8,\n    \"publication_year\": 1961\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{baseUrl}}/books/{{bookId}}",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"books",
+										"{{bookId}}"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "4. Update Book (PUT) - Fail (Stale ETag)",
+							"event": [
+								{
+									"listen": "test",
+									"script": {
+										"exec": [
+											"// --- Testy ---",
+											"pm.test(\"Status code is 412 Precondition Failed\", function () {",
+											"    pm.response.to.have.status(412);",
+											"});",
+											"",
+											"// --- Logowanie ---",
+											"console.log(\"Request URL:\", pm.request.url.toString());",
+											"console.log(\"Response Status:\", pm.response.code, pm.response.status);",
+											"console.log(\"Response Body:\", pm.response.text());"
+										],
+										"type": "text/javascript"
+									}
+								}
+							],
+							"request": {
+								"method": "PUT",
+								"header": [
+									{
+										"key": "If-Match",
+										"value": "\"stary-lub-zly-etag\"",
+										"type": "text"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"title\": \"Solaris\",\n    \"author_id\": \"{{authorId}}\",\n    \"copies\": 1,\n    \"publication_year\": 1961\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{baseUrl}}/books/{{bookId}}",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"books",
+										"{{bookId}}"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "5. Partially Update Book (PATCH)",
+							"event": [
+								{
+									"listen": "test",
+									"script": {
+										"exec": [
+											"// --- Testy ---",
+											"pm.test(\"Status code is 200 OK\", function () {",
+											"    pm.response.to.have.status(200);",
+											"});",
+											"// Save the new ETag for the next request",
+											"pm.collectionVariables.set(\"bookEtag\", pm.response.headers.get('ETag'));",
+											"",
+											"// --- Logowanie ---",
+											"console.log(\"Request URL:\", pm.request.url.toString());",
+											"console.log(\"Response Status:\", pm.response.code, pm.response.status);",
+											"console.log(\"Response Body:\", pm.response.text());"
+										],
+										"type": "text/javascript"
+									}
+								}
+							],
+							"request": {
+								"method": "PATCH",
+								"header": [
+									{
+										"key": "If-Match",
+										"value": "{{bookEtag}}",
+										"type": "text"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"copies\": 7\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{baseUrl}}/books/{{bookId}}",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"books",
+										"{{bookId}}"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "6. Delete Book",
+							"event": [
+								{
+									"listen": "test",
+									"script": {
+										"exec": [
+											"// --- Testy ---",
+											"pm.test(\"Status code is 204 No Content\", function () {",
+											"    pm.response.to.have.status(204);",
+											"});",
+											"",
+											"// --- Logowanie ---",
+											"console.log(\"Request URL:\", pm.request.url.toString());",
+											"console.log(\"Response Status:\", pm.response.code, pm.response.status);",
+											"console.log(\"Response Body:\", pm.response.text());"
+										],
+										"type": "text/javascript"
+									}
+								}
+							],
+							"request": {
+								"method": "DELETE",
+								"header": [
+									{
+										"key": "If-Match",
+										"value": "{{bookEtag}}",
+										"type": "text"
+									}
+								],
+								"url": {
+									"raw": "{{baseUrl}}/books/{{bookId}}",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"books",
+										"{{bookId}}"
+									]
+								}
+							},
+							"response": []
 						}
-					},
-					"response": []
+					]
 				}
 			]
 		},
 		{
-			"name": "3. Orders (Idempotency)",
+			"name": "3. Orders (Idempotency Demonstration)",
 			"item": [
 				{
-					"name": "Create Order (First time)",
-					"event": [
+					"name": "Scenario: Handling Repeated Requests",
+					"item": [
 						{
-							"listen": "test",
-							"script": {
-								"exec": [
-									"// --- Logowanie ---",
-									"console.log(\"Request URL:\", pm.request.url.toString());",
-									"console.log(\"Response Status:\", pm.response.code, pm.response.status);",
-									"console.log(\"Response Body:\", pm.response.text());"
-								],
-								"type": "text/javascript"
-							}
-						}
-					],
-					"request": {
-						"method": "POST",
-						"header": [
-							{
-								"key": "Idempotency-Key",
-								"value": "klucz-testowy-12345",
-								"type": "text"
-							}
-						],
-						"body": {
-							"mode": "raw",
-							"raw": "{\n    \"bookId\": \"2\",\n    \"quantity\": 1\n}",
-							"options": {
-								"raw": {
-									"language": "json"
+							"name": "1. Submit Order (First Attempt)",
+							"event": [
+								{
+									"listen": "prerequest",
+									"script": {
+										"exec": [
+											"// Generujemy unikalny klucz dla tej operacji i zapisujemy go",
+											"// aby móc go użyć w kolejnym, zduplikowanym żądaniu.",
+											"pm.collectionVariables.set(\"idempotencyKey\", pm.variables.get(\"{{$guid}}\"));"
+										],
+										"type": "text/javascript"
+									}
+								},
+								{
+									"listen": "test",
+									"script": {
+										"exec": [
+											"// --- Testy ---",
+											"pm.test(\"Status code is 201 Created\", function () {",
+											"    pm.response.to.have.status(201);",
+											"});",
+											"// Zapisujemy odpowiedź, aby porównać ją z odpowiedzią na zduplikowane żądanie",
+											"pm.collectionVariables.set(\"firstOrderResponse\", pm.response.text());",
+											"",
+											"// --- Logowanie ---",
+											"console.log(\"Request URL:\", pm.request.url.toString());",
+											"console.log(\"Idempotency-Key:\", pm.collectionVariables.get(\"idempotencyKey\"));",
+											"console.log(\"Response Status:\", pm.response.code, pm.response.status);",
+											"console.log(\"Response Body:\", pm.response.text());"
+										],
+										"type": "text/javascript"
+									}
 								}
-							}
-						},
-						"url": {
-							"raw": "{{baseUrl}}/orders",
-							"host": [
-								"{{baseUrl}}"
 							],
-							"path": [
-								"orders"
-							]
-						}
-					},
-					"response": []
-				},
-				{
-					"name": "Create Order (Duplicate)",
-					"event": [
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Idempotency-Key",
+										"value": "{{idempotencyKey}}",
+										"type": "text"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"bookId\": \"2\",\n    \"quantity\": 1\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{baseUrl}}/orders",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"orders"
+									]
+								}
+							},
+							"response": []
+						},
 						{
-							"listen": "test",
-							"script": {
-								"exec": [
-									"// --- Logowanie ---",
-									"console.log(\"Request URL:\", pm.request.url.toString());",
-									"console.log(\"Response Status:\", pm.response.code, pm.response.status);",
-									"console.log(\"Response Body:\", pm.response.text());"
-								],
-								"type": "text/javascript"
-							}
-						}
-					],
-					"request": {
-						"method": "POST",
-						"header": [
-							{
-								"key": "Idempotency-Key",
-								"value": "klucz-testowy-12345",
-								"type": "text"
-							}
-						],
-						"body": {
-							"mode": "raw",
-							"raw": "{\n    \"bookId\": \"2\",\n    \"quantity\": 1\n}",
-							"options": {
-								"raw": {
-									"language": "json"
+							"name": "2. Resubmit Order (Network Error Simulation)",
+							"event": [
+								{
+									"listen": "test",
+									"script": {
+										"exec": [
+											"// --- Testy ---",
+											"// Serwer powinien zwrócić 200 OK (lub 201, w zależności od implementacji) dla zduplikowanego żądania",
+											"pm.test(\"Status code is successful (200 or 201)\", function () {",
+											"    pm.expect(pm.response.code).to.be.oneOf([200, 201]);",
+											"});",
+											"",
+											"pm.test(\"Response body is identical to the first one\", function () {",
+											"    const firstResponse = pm.collectionVariables.get(\"firstOrderResponse\");",
+											"    pm.response.to.have.body(firstResponse);",
+											"});",
+											"",
+											"// --- Logowanie ---",
+											"console.log(\"Request URL:\", pm.request.url.toString());",
+											"console.log(\"Idempotency-Key (the same as before):\", pm.collectionVariables.get(\"idempotencyKey\"));",
+											"console.log(\"Response Status:\", pm.response.code, pm.response.status);",
+											"console.log(\"Response Body:\", pm.response.text());"
+										],
+										"type": "text/javascript"
+									}
 								}
-							}
-						},
-						"url": {
-							"raw": "{{baseUrl}}/orders",
-							"host": [
-								"{{baseUrl}}"
 							],
-							"path": [
-								"orders"
-							]
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Idempotency-Key",
+										"value": "{{idempotencyKey}}",
+										"type": "text"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"bookId\": \"2\",\n    \"quantity\": 1\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{baseUrl}}/orders",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"orders"
+									]
+								},
+								"description": "Wysyła to samo żądanie z tym samym kluczem idempotencji, aby sprawdzić, czy serwer zwróci zapisaną odpowiedź."
+							},
+							"response": []
 						},
-						"description": "Wysyła to samo żądanie z tym samym kluczem idempotencji, aby sprawdzić, czy serwer zwróci zapisaną odpowiedź."
-					},
-					"response": []
+						{
+							"name": "3. Submit a NEW Order for the same book",
+							"event": [
+								{
+									"listen": "prerequest",
+									"script": {
+										"exec": [
+											"// Generujemy NOWY, unikalny klucz dla tej nowej operacji.",
+											"pm.collectionVariables.set(\"idempotencyKey\", pm.variables.get(\"{{$guid}}\"));"
+										],
+										"type": "text/javascript"
+									}
+								},
+								{
+									"listen": "test",
+									"script": {
+										"exec": [
+											"// --- Testy ---",
+											"pm.test(\"Status code is 201 Created\", function () {",
+											"    pm.response.to.have.status(201);",
+											"});",
+											"",
+											"pm.test(\"Response body is different from the first order\", function () {",
+											"    const firstResponse = pm.collectionVariables.get(\"firstOrderResponse\");",
+											"    pm.expect(pm.response.text()).to.not.equal(firstResponse);",
+											"});",
+											"",
+											"// --- Logowanie ---",
+											"console.log(\"Request URL:\", pm.request.url.toString());",
+											"console.log(\"Idempotency-Key (NEW and UNIQUE):\", pm.collectionVariables.get(\"idempotencyKey\"));",
+											"console.log(\"Response Status:\", pm.response.code, pm.response.status);",
+											"console.log(\"Response Body:\", pm.response.text());"
+										],
+										"type": "text/javascript"
+									}
+								}
+							],
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Idempotency-Key",
+										"value": "{{idempotencyKey}}",
+										"type": "text"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"bookId\": \"2\",\n    \"quantity\": 1\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{baseUrl}}/orders",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"orders"
+									]
+								},
+								"description": "Wysyła żądanie z NOWYM kluczem idempotencji, co powinno utworzyć zupełnie nowe zamówienie."
+							},
+							"response": []
+						}
+					]
 				}
 			]
 		},
@@ -449,6 +824,20 @@
 							"listen": "test",
 							"script": {
 								"exec": [
+									"// --- Testy ---",
+									"pm.test(\"Status code is 200 OK\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test(\"Response has correct structure\", function () {",
+									"    const jsonData = pm.response.json();",
+									"    pm.expect(jsonData).to.have.property('status', 'Completed');",
+									"    pm.expect(jsonData).to.have.property('updated');",
+									"    pm.expect(jsonData).to.have.property('notFound');",
+									"    pm.expect(jsonData.updated).to.be.an('array');",
+									"    pm.expect(jsonData.notFound).to.be.an('array');",
+									"});",
+									"",
 									"// --- Logowanie ---",
 									"console.log(\"Request URL:\", pm.request.url.toString());",
 									"console.log(\"Response Status:\", pm.response.code, pm.response.status);",
@@ -463,7 +852,7 @@
 						"header": [],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n    \"bookIds\": [\"1\", \"2\"],\n    \"updates\": {\n        \"copies\": 50\n    }\n}",
+							"raw": "{\n    \"bookIds\": [\"1\", \"2\", \"non-existent-id\"],\n    \"updates\": {\n        \"copies\": 99\n    }\n}",
 							"options": {
 								"raw": {
 									"language": "json"
