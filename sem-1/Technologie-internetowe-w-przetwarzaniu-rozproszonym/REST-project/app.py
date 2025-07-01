@@ -115,7 +115,7 @@ def authors_collection():
         authors[author_id] = author
         
         response = jsonify(author)
-        response.headers['Location'] = f'/api/v1/authors/{author_id}'
+        response.headers['Link'] = f'/api/v1/authors/{author_id}'
         return response, 201
 
 @app.route('/api/v1/authors/<author_id>', methods=['GET', 'PUT', 'PATCH', 'DELETE'])
@@ -174,7 +174,7 @@ def author_resource(author_id):
         authors[author_id] = updated_author
         
         response = jsonify(updated_author)
-        response.headers['Location'] = f'/api/v1/authors/{author_id}'
+        response.headers['Link'] = f'/api/v1/authors/{author_id}'
         return response, 200
     
     elif request.method == 'PATCH':
@@ -225,7 +225,7 @@ def author_resource(author_id):
         authors[author_id] = current_author
         
         response = jsonify(current_author)
-        response.headers['Location'] = f'/api/v1/authors/{author_id}'
+        response.headers['Link'] = f'/api/v1/authors/{author_id}'
         return response, 200
     
     elif request.method == 'DELETE':
@@ -403,7 +403,7 @@ def books_collection():
         book['author_name'] = authors[data['author_id']]['name']
         
         response = jsonify(book)
-        response.headers['Location'] = f'/api/v1/books/{book_id}'
+        response.headers['Link'] = f'/api/v1/books/{book_id}'
         return response, 201
 
 @app.route('/api/v1/books/<book_id>', methods=['GET', 'PUT', 'PATCH', 'DELETE'])
@@ -449,7 +449,7 @@ def book_resource(book_id):
         
         response = jsonify(updated_book)
         response.headers['ETag'] = f'"{updated_book["etag"]}"'
-        response.headers['Location'] = f'/api/v1/books/{book_id}'
+        response.headers['Link'] = f'/api/v1/books/{book_id}'
         return response
     
     elif request.method == 'PATCH':
@@ -479,7 +479,7 @@ def book_resource(book_id):
         
         response = jsonify(updated_book)
         response.headers['ETag'] = f'"{updated_book["etag"]}"'
-        response.headers['Location'] = f'/api/v1/books/{book_id}'
+        response.headers['Link'] = f'/api/v1/books/{book_id}'
         return response
     
     else:  # DELETE
