@@ -114,7 +114,9 @@ def authors_collection():
         # Zapisywanie w pamięci
         authors[author_id] = author
         
-        return jsonify(author), 201
+        response = jsonify(author)
+        response.headers['Location'] = f'/api/v1/authors/{author_id}'
+        return response, 201
 
 @app.route('/api/v1/authors/<author_id>', methods=['GET', 'PUT', 'PATCH', 'DELETE'])
 def author_resource(author_id):
@@ -171,7 +173,9 @@ def author_resource(author_id):
         # Zapisywanie w pamięci
         authors[author_id] = updated_author
         
-        return jsonify(updated_author), 200
+        response = jsonify(updated_author)
+        response.headers['Location'] = f'/api/v1/authors/{author_id}'
+        return response, 200
     
     elif request.method == 'PATCH':
         # Częściowa aktualizacja autora
@@ -220,7 +224,9 @@ def author_resource(author_id):
         # Zapisywanie w pamięci
         authors[author_id] = current_author
         
-        return jsonify(current_author), 200
+        response = jsonify(current_author)
+        response.headers['Location'] = f'/api/v1/authors/{author_id}'
+        return response, 200
     
     elif request.method == 'DELETE':
         # Usuwanie autora
@@ -334,7 +340,25 @@ def books_collection():
             else:
                 book['author_name'] = "Unknown Author"
         
-        return jsonify(result), 200
+        response = jsonify(result)
+        
+        # Budowanie nagłówka Link dla paginacji
+        links = []
+        base_url = request.base_url
+        pagination_info = result['pagination']
+        
+        if pagination_info['has_next']:
+            next_url = f'{base_url}?page={page + 1}&limit={limit}'
+            links.append(f'<{next_url}>; rel="next"')
+            
+        if pagination_info['has_previous']:
+            prev_url = f'{base_url}?page={page - 1}&limit={limit}'
+            links.append(f'<{prev_url}>; rel="prev"')
+            
+        if links:
+            response.headers['Link'] = ', '.join(links)
+            
+        return response, 200
     
     elif request.method == 'POST':
         # Dodawanie nowej książki
@@ -378,7 +402,9 @@ def books_collection():
         # Dodawanie nazwy autora do odpowiedzi
         book['author_name'] = authors[data['author_id']]['name']
         
-        return jsonify(book), 201
+        response = jsonify(book)
+        response.headers['Location'] = f'/api/v1/books/{book_id}'
+        return response, 201
 
 @app.route('/api/v1/books/<book_id>', methods=['GET', 'PUT', 'PATCH', 'DELETE'])
 def book_resource(book_id):
@@ -423,6 +449,7 @@ def book_resource(book_id):
         
         response = jsonify(updated_book)
         response.headers['ETag'] = f'"{updated_book["etag"]}"'
+        response.headers['Location'] = f'/api/v1/books/{book_id}'
         return response
     
     elif request.method == 'PATCH':
@@ -452,6 +479,7 @@ def book_resource(book_id):
         
         response = jsonify(updated_book)
         response.headers['ETag'] = f'"{updated_book["etag"]}"'
+        response.headers['Location'] = f'/api/v1/books/{book_id}'
         return response
     
     else:  # DELETE
