@@ -619,6 +619,54 @@
 					"name": "Scenario: Handling Repeated Requests",
 					"item": [
 						{
+							"name": "0. SETUP - Create a Book for Ordering",
+							"event": [
+								{
+									"listen": "test",
+									"script": {
+										"exec": [
+											"pm.test(\"Status code is 201 Created\", function () {",
+											"    pm.response.to.have.status(201);",
+											"});",
+											"",
+											"// Zapisujemy ID i ETag nowo utworzonej książki do zmiennych",
+											"// Będą one używane w kolejnych krokach tego scenariusza.",
+											"const responseData = pm.response.json();",
+											"pm.collectionVariables.set(\"orderTestBookId\", responseData.id);",
+											"pm.collectionVariables.set(\"bookEtagForOrderTest\", pm.response.headers.get('ETag'));",
+											"",
+											"console.log(`Created book with ID: ${responseData.id} for order tests.`);"
+										],
+										"type": "text/javascript"
+									}
+								}
+							],
+							"request": {
+								"method": "POST",
+								"header": [],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"title\": \"Book for Idempotency Test\",\n    \"author_id\": \"{{authorId}}\",\n    \"copies\": 50,\n    \"publication_year\": 2023\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{baseUrl}}/books",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"books"
+									]
+								},
+								"description": "Tworzy tymczasową książkę, która zostanie użyta w teście idempotencji zamówień. Jej ID jest zapisywane w zmiennej `orderTestBookId`."
+							},
+							"response": []
+						},
+						{
 							"name": "1. Submit Order (First Attempt)",
 							"event": [
 								{
@@ -671,7 +719,7 @@
 								],
 								"body": {
 									"mode": "raw",
-									"raw": "{\n    \"bookId\": \"2\",\n    \"quantity\": 1\n}",
+									"raw": "{\n    \"bookId\": \"{{orderTestBookId}}\",\n    \"quantity\": 1\n}",
 									"options": {
 										"raw": {
 											"language": "json"
@@ -729,7 +777,7 @@
 								],
 								"body": {
 									"mode": "raw",
-									"raw": "{\n    \"bookId\": \"2\",\n    \"quantity\": 1\n}",
+									"raw": "{\n    \"bookId\": \"{{orderTestBookId}}\",\n    \"quantity\": 1\n}",
 									"options": {
 										"raw": {
 											"language": "json"
@@ -803,7 +851,7 @@
 								],
 								"body": {
 									"mode": "raw",
-									"raw": "{\n    \"bookId\": \"2\",\n    \"quantity\": 1\n}",
+									"raw": "{\n    \"bookId\": \"{{orderTestBookId}}\",\n    \"quantity\": 1\n}",
 									"options": {
 										"raw": {
 											"language": "json"
@@ -820,6 +868,50 @@
 									]
 								},
 								"description": "Wysyła żądanie z NOWYM kluczem idempotencji, co powinno utworzyć zupełnie nowe zamówienie."
+							},
+							"response": []
+						},
+						{
+							"name": "4. TEARDOWN - Delete The Test Book",
+							"event": [
+								{
+									"listen": "test",
+									"script": {
+										"exec": [
+											"pm.test(\"Status code is 204 No Content\", function () {",
+											"    pm.response.to.have.status(204);",
+											"});",
+											"",
+											"// Czyszczenie zmiennych po teście",
+											"pm.collectionVariables.unset(\"orderTestBookId\");",
+											"pm.collectionVariables.unset(\"bookEtagForOrderTest\");",
+											"",
+											"console.log(\"Cleaned up test book and variables.\");"
+										],
+										"type": "text/javascript"
+									}
+								}
+							],
+							"request": {
+								"method": "DELETE",
+								"header": [
+									{
+										"key": "If-Match",
+										"value": "{{bookEtagForOrderTest}}",
+										"type": "text"
+									}
+								],
+								"url": {
+									"raw": "{{baseUrl}}/books/{{orderTestBookId}}",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"books",
+										"{{orderTestBookId}}"
+									]
+								},
+								"description": "Usuwa książkę stworzoną na potrzeby tego scenariusza testowego, aby nie zostawiać śmieci."
 							},
 							"response": []
 						}
