@@ -627,7 +627,7 @@
 										"exec": [
 											"// Generujemy unikalny klucz dla tej operacji i zapisujemy go",
 											"// aby móc go użyć w kolejnym, zduplikowanym żądaniu.",
-											"pm.collectionVariables.set(\"idempotencyKey\", pm.variables.get(\"{{$guid}}\"));"
+											"pm.collectionVariables.set(\"idempotencyKey\", pm.variables.replaceIn('{{$guid}}'));"
 										],
 										"type": "text/javascript"
 									}
@@ -750,7 +750,7 @@
 									"script": {
 										"exec": [
 											"// Generujemy NOWY, unikalny klucz dla tej nowej operacji.",
-											"pm.collectionVariables.set(\"idempotencyKey\", pm.variables.get(\"{{$guid}}\"));"
+											"pm.collectionVariables.set(\"idempotencyKey\", pm.variables.replaceIn('{{$guid}}'));"
 										],
 										"type": "text/javascript"
 									}
