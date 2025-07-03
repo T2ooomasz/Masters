@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, url_for
 import hashlib
 import uuid
 from datetime import datetime
@@ -115,7 +115,8 @@ def authors_collection():
         authors[author_id] = author
         
         response = jsonify(author)
-        response.headers['Link'] = f'/api/v1/authors/{author_id}'
+        # Zgodnie ze standardem REST, dla 201 Created używamy nagłówka Location
+        response.headers['Location'] = url_for('author_resource', author_id=author_id, _external=True)
         return response, 201
 
 @app.route('/api/v1/authors/<author_id>', methods=['GET', 'PUT', 'PATCH', 'DELETE'])
@@ -174,7 +175,7 @@ def author_resource(author_id):
         authors[author_id] = updated_author
         
         response = jsonify(updated_author)
-        response.headers['Link'] = f'/api/v1/authors/{author_id}'
+        # Nagłówek Link: rel="self" jest teraz dodawany automatycznie przez hook @app.after_request
         return response, 200
     
     elif request.method == 'PATCH':
@@ -225,7 +226,7 @@ def author_resource(author_id):
         authors[author_id] = current_author
         
         response = jsonify(current_author)
-        response.headers['Link'] = f'/api/v1/authors/{author_id}'
+        # Nagłówek Link: rel="self" jest teraz dodawany automatycznie przez hook @app.after_request
         return response, 200
     
     elif request.method == 'DELETE':
@@ -403,7 +404,8 @@ def books_collection():
         book['author_name'] = authors[data['author_id']]['name']
         
         response = jsonify(book)
-        response.headers['Link'] = f'/api/v1/books/{book_id}'
+        # Zgodnie ze standardem REST, dla 201 Created używamy nagłówka Location
+        response.headers['Location'] = url_for('book_resource', book_id=book_id, _external=True)
         return response, 201
 
 @app.route('/api/v1/books/<book_id>', methods=['GET', 'PUT', 'PATCH', 'DELETE'])
@@ -449,7 +451,7 @@ def book_resource(book_id):
         
         response = jsonify(updated_book)
         response.headers['ETag'] = f'"{updated_book["etag"]}"'
-        response.headers['Link'] = f'/api/v1/books/{book_id}'
+        # Nagłówek Link: rel="self" jest teraz dodawany automatycznie przez hook @app.after_request
         return response
     
     elif request.method == 'PATCH':
@@ -479,7 +481,7 @@ def book_resource(book_id):
         
         response = jsonify(updated_book)
         response.headers['ETag'] = f'"{updated_book["etag"]}"'
-        response.headers['Link'] = f'/api/v1/books/{book_id}'
+        # Nagłówek Link: rel="self" jest teraz dodawany automatycznie przez hook @app.after_request
         return response
     
     else:  # DELETE
@@ -606,6 +608,31 @@ def bulk_update():
         "updated": updated_books,
         "notFound": not_found_ids
     })
+
+# =============================================================================
+# HOOKS - MODYFIKACJA ODPOWIEDZI
+# =============================================================================
+
+@app.after_request
+def add_self_link_header(response):
+    """Dodaje nagłówek Link: rel="self" do każdej udanej odpowiedzi JSON."""
+    # Chcemy dodawać linki tylko do udanych odpowiedzi (2xx) zwracających JSON
+    if response.status_code >= 200 and response.status_code < 300 and \
+       response.mimetype == 'application/json':
+        
+        # request.url zawiera pełny, absolutny URL żądania
+        self_link = f'<{request.url}>; rel="self"'
+        
+        # Sprawdzamy, czy nagłówek Link już istnieje (np. dla paginacji)
+        if 'Link' in response.headers:
+            # Jeśli tak, dołączamy link "self" do istniejących
+            response.headers['Link'] = f"{response.headers['Link']}, {self_link}"
+        else:
+            # W przeciwnym razie, ustawiamy nowy nagłówek
+            response.headers['Link'] = self_link
+            
+    return response
+
 
 # =============================================================================
 # OBSŁUGA BŁĘDÓW
