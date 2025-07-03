@@ -562,11 +562,25 @@ def orders_collection():
                 "status": 201
             }
         
-        return jsonify(order), 201
+        response = jsonify(order)
+        response.headers['Location'] = url_for('order_resource', order_id=order_id, _external=True)
+        return response, 201
+
+@app.route('/api/v1/orders/<order_id>', methods=['GET'])
+def order_resource(order_id):
+    """Zwraca informacje o pojedynczym zleceniu"""
+    if order_id not in orders:
+        return create_error_response("Order not found", 404,
+                                     f"Order with id '{order_id}' does not exist")
+    
+    order = orders[order_id]
+    response = jsonify(order)
+    return response, 200
+
 
 # ==================== KONTROLER - BULK UPDATE ====================
 
-@app.route('/api/v1/bulk-update', methods=['POST'])
+@app.route('/api/v1/batch/bulk-update', methods=['POST'])
 def bulk_update():
     """
     Aktualizuje wiele książek w jednej operacji.
@@ -755,6 +769,7 @@ if __name__ == '__main__':
 
     print("\n[ORDERS]")
     print("  GET    /api/v1/orders              - Lista zleceń")
+    print("  GET    /api/v1/orders/{id}         - Info o zleceniu")
     print("  POST   /api/v1/orders              - Utwórz zlecenie (idempotentne)")
 
     print("\n[BULK UPDATE]")
