@@ -73,12 +73,44 @@ def authors_collection():
     """
     
     if request.method == 'GET':
-        # Zwracamy listę wszystkich autorów
-        authors_list = list(authors.values())
-        return jsonify({
-            "data": authors_list,
-            "total": len(authors_list)
-        }), 200
+        # Pobieranie parametrów stronicowania dla spójności z innymi endpointami
+        try:
+            page = int(request.args.get('page', 1))
+            limit = int(request.args.get('limit', 10))
+        except ValueError:
+            return create_error_response("Invalid pagination parameters", 400,
+                                       "Parameters 'page' and 'limit' must be positive integers")
+
+        # Walidacja parametrów
+        if page < 1:
+            return create_error_response("Invalid page parameter", 400,
+                                       "Parameter 'page' must be greater than 0")
+
+        if limit < 1 or limit > 100:
+            return create_error_response("Invalid limit parameter", 400,
+                                       "Parameter 'limit' must be between 1 and 100")
+
+        # Użycie tej samej logiki paginacji co dla książek
+        result = paginate_data(authors, page, limit)
+        response = jsonify(result)
+        
+        # Budowanie nagłówka Link dla paginacji, tak jak w /books
+        links = []
+        base_url = request.base_url
+        pagination_info = result['pagination']
+
+        if pagination_info['has_next']:
+            next_url = f'{base_url}?page={page + 1}&limit={limit}'
+            links.append(f'<{next_url}>; rel="next"')
+            
+        if pagination_info['has_previous']:
+            prev_url = f'{base_url}?page={page - 1}&limit={limit}'
+            links.append(f'<{prev_url}>; rel="prev"')
+            
+        if links:
+            response.headers['Link'] = ', '.join(links)
+            
+        return response, 200
     
     elif request.method == 'POST':
         # Dodajemy nowego autora
@@ -188,33 +220,33 @@ def author_resource(author_id):
         if not data:
             return create_error_response("Request body is required", 400)
         
-        # Pobieramy aktualnego autora
         current_author = authors[author_id].copy()
+        validation_errors = []
         
-        # Aktualizujemy tylko przekazane pola
-        if 'name' in data:
-            if not isinstance(data['name'], str) or not data['name'].strip():
-                return create_error_response("Validation error", 400, 
-                                           "Field 'name' must be a non-empty string")
-            current_author['name'] = data['name'].strip()
+        # Definiujemy pola, które można aktualizować i ich walidację
+        updatable_fields = {
+            'name': lambda v: isinstance(v, str) and v.strip(),
+            'bio': lambda v: isinstance(v, str) or v is None,
+            'birth_year': lambda v: isinstance(v, int) or v is None
+        }
+
+        for field, value in data.items():
+            if field in updatable_fields:
+                if updatable_fields[field](value):
+                    if value is None:
+                        current_author.pop(field, None)
+                    else:
+                        current_author[field] = value.strip() if isinstance(value, str) else value
+                else:
+                    validation_errors.append(f"Invalid value for field '{field}'")
+            # Można dodać logikę ignorowania lub odrzucania nieznanych pól
         
-        if 'bio' in data:
-            if isinstance(data['bio'], str):
-                current_author['bio'] = data['bio'].strip()
-            elif data['bio'] is None:
-                current_author.pop('bio', None)
-            else:
-                return create_error_response("Validation error", 400, 
-                                           "Field 'bio' must be a string or null")
-        
-        if 'birth_year' in data:
-            if isinstance(data['birth_year'], int):
-                current_author['birth_year'] = data['birth_year']
-            elif data['birth_year'] is None:
-                current_author.pop('birth_year', None)
-            else:
-                return create_error_response("Validation error", 400, 
-                                           "Field 'birth_year' must be an integer or null")
+        if validation_errors:
+            return create_error_response("Validation error", 400, ", ".join(validation_errors))
+
+        # Pole 'name' jest wymagane i nie może być usunięte
+        if 'name' not in current_author:
+             return create_error_response("Validation error", 400, "Field 'name' cannot be removed")
         
         # Aktualizujemy timestamp
         current_author['updated_at'] = datetime.now().isoformat()
@@ -231,6 +263,16 @@ def author_resource(author_id):
     
     elif request.method == 'DELETE':
         # Usuwanie autora
+        # Opcjonalne sprawdzenie ETag dla DELETE dla spójności z /books
+        if_match = request.headers.get('If-Match')
+        if if_match:
+            if_match = if_match.strip('"')
+            current_etag = authors[author_id]["etag"]
+            
+            if if_match != current_etag:
+                return create_error_response("Precondition Failed", 412,
+                                           "The resource has been modified by another client")
+
         del authors[author_id]
         return '', 204
 
