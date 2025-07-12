@@ -2,6 +2,7 @@ from flask import Flask, request, jsonify, url_for
 import hashlib
 import uuid
 from datetime import datetime
+from functools import wraps
 
 app = Flask(__name__)
 
@@ -344,6 +345,39 @@ def paginate_data(data_dict, page, limit):
         }
     }
 
+def etag_precondition_check(resource_collection, required=False):
+    """
+    Dekorator do sprawdzania nagłówka If-Match i ETag.
+    :param resource_collection: Słownik przechowujący zasoby (np. `books` lub `authors`).
+    :param required: Czy nagłówek If-Match jest wymagany.
+    """
+    def decorator(f):
+        @wraps(f)
+        def decorated_function(resource_id, *args, **kwargs):
+            if_match_header = request.headers.get('If-Match')
+
+            if required and not if_match_header:
+                return create_error_response(
+                    "Precondition Required", 428,
+                    "If-Match header is required for this operation."
+                )
+
+            if if_match_header:
+                provided_etag = if_match_header.strip('"')
+                # Upewniamy się, że zasób istnieje przed próbą dostępu
+                if resource_id in resource_collection:
+                    current_etag = resource_collection[resource_id].get("etag")
+
+                    if provided_etag != current_etag:
+                        return create_error_response(
+                            "Precondition Failed", 412,
+                            "The resource has been modified by another client."
+                        )
+            
+            return f(resource_id, *args, **kwargs)
+        return decorated_function
+    return decorator
+
 # =============================================================================
 # KOLEKCJA KSIĄŻEK ZE STRONICOWANIEM
 # =============================================================================
@@ -450,6 +484,91 @@ def books_collection():
         response.headers['Location'] = url_for('book_resource', book_id=book_id, _external=True)
         return response, 201
 
+@etag_precondition_check(resource_collection=books, required=True)
+def update_book_put(book_id):
+    """Obsługuje logikę dla PUT /books/{id} z wymaganym ETag."""
+    try:
+        data = request.get_json()
+    except Exception:
+        return create_error_response("Invalid JSON", 400)
+
+    is_valid, error_msg = validate_book_data(data)
+    if not is_valid:
+        return create_error_response("Validation error", 400, error_msg)
+
+    # Tworzenie nowej wersji książki z zachowaniem daty utworzenia
+    current_book = books[book_id]
+    updated_book = {
+        "id": book_id,
+        "title": data['title'].strip(),
+        "author_id": data['author_id'],
+        "copies": data.get('copies', 1),
+        "created_at": current_book['created_at'],
+        "updated_at": datetime.now().isoformat()
+    }
+
+    if 'isbn' in data: updated_book['isbn'] = data['isbn'].strip()
+    if 'publication_year' in data: updated_book['publication_year'] = data['publication_year']
+    if 'description' in data: updated_book['description'] = data['description'].strip()
+
+    updated_book['etag'] = generate_etag(updated_book)
+    books[book_id] = updated_book
+
+    response = jsonify(updated_book)
+    response.headers['ETag'] = f'"{updated_book["etag"]}"'
+    return response, 200
+
+@etag_precondition_check(resource_collection=books, required=False)
+def update_book_patch(book_id):
+    """Obsługuje logikę dla PATCH /books/{id} z opcjonalnym ETag."""
+    try:
+        data = request.get_json()
+    except Exception:
+        return create_error_response("Invalid JSON", 400)
+
+    if not data or not isinstance(data, dict):
+        return create_error_response("Request body must be a non-empty JSON object", 400)
+
+    current_book = books[book_id].copy()
+    validation_errors = []
+
+    # Definiujemy pola, które można aktualizować i ich walidację
+    updatable_fields = {
+        'title': lambda v: isinstance(v, str) and v.strip(),
+        'author_id': lambda v: isinstance(v, str) and v.strip() and v in authors,
+        'copies': lambda v: isinstance(v, int) and v >= 0,
+        'isbn': lambda v: isinstance(v, str) or v is None,
+        'publication_year': lambda v: isinstance(v, int) or v is None,
+        'description': lambda v: isinstance(v, str) or v is None
+    }
+
+    for field, value in data.items():
+        if field in updatable_fields:
+            if updatable_fields[field](value):
+                if value is None:
+                    current_book.pop(field, None)
+                else:
+                    current_book[field] = value.strip() if isinstance(value, str) else value
+            else:
+                validation_errors.append(f"Invalid value for field '{field}'")
+
+    if validation_errors:
+        return create_error_response("Validation error", 400, ", ".join(validation_errors))
+
+    current_book['updated_at'] = datetime.now().isoformat()
+    current_book['etag'] = generate_etag(current_book)
+    books[book_id] = current_book
+
+    response = jsonify(current_book)
+    response.headers['ETag'] = f'"{current_book["etag"]}"'
+    return response, 200
+
+@etag_precondition_check(resource_collection=books, required=False)
+def delete_book(book_id):
+    """Obsługuje logikę dla DELETE /books/{id} z opcjonalnym ETag."""
+    del books[book_id]
+    return '', 204
+
 @app.route('/api/v1/books/<book_id>', methods=['GET', 'PUT', 'PATCH', 'DELETE'])
 def book_resource(book_id):
     """Pojedyncza książka z obsługą ETag i Lost Update Problem"""
@@ -463,84 +582,13 @@ def book_resource(book_id):
         return response
     
     elif request.method == 'PUT':
-        # Sprawdzenie warunku If-Match dla ETag
-        if_match = request.headers.get('If-Match')
-        if not if_match:
-            return jsonify({
-                "error": "If-Match header is required for PUT operations",
-                "message": "To prevent lost updates, include If-Match header with current ETag"
-            }), 428  # Precondition Required
-        
-        # Usunięcie cudzysłowów z ETag jeśli istnieją
-        if_match = if_match.strip('"')
-        current_etag = books[book_id]["etag"]
-        
-        if if_match != current_etag:
-            return jsonify({
-                "error": "Precondition failed",
-                "message": "The resource has been modified by another client",
-                "current_etag": current_etag,
-                "provided_etag": if_match
-            }), 412  # Precondition Failed
-        
-        data = request.json
-        if not data or 'title' not in data:
-            return jsonify({"error": "Title is required"}), 400
-        
-        # Tworzenie nowej wersji książki
-        updated_book = create_book_with_etag(data, book_id)
-        books[book_id] = updated_book
-        
-        response = jsonify(updated_book)
-        response.headers['ETag'] = f'"{updated_book["etag"]}"'
-        # Nagłówek Link: rel="self" jest teraz dodawany automatycznie przez hook @app.after_request
-        return response
+        return update_book_put(book_id)
     
     elif request.method == 'PATCH':
-        # Sprawdzenie warunku If-Match dla ETag (opcjonalne dla PATCH)
-        if_match = request.headers.get('If-Match')
-        if if_match:
-            if_match = if_match.strip('"')
-            current_etag = books[book_id]["etag"]
-            
-            if if_match != current_etag:
-                return jsonify({
-                    "error": "Precondition failed",
-                    "message": "The resource has been modified by another client",
-                    "current_etag": current_etag,
-                    "provided_etag": if_match
-                }), 412
-        
-        data = request.json
-        if not data:
-            return jsonify({"error": "No data provided"}), 400
-        
-        # Aktualizacja częściowa
-        current_book = books[book_id].copy()
-        current_book.update(data)
-        updated_book = create_book_with_etag(current_book, book_id)
-        books[book_id] = updated_book
-        
-        response = jsonify(updated_book)
-        response.headers['ETag'] = f'"{updated_book["etag"]}"'
-        # Nagłówek Link: rel="self" jest teraz dodawany automatycznie przez hook @app.after_request
-        return response
+        return update_book_patch(book_id)
     
     else:  # DELETE
-        # Opcjonalne sprawdzenie ETag dla DELETE
-        if_match = request.headers.get('If-Match')
-        if if_match:
-            if_match = if_match.strip('"')
-            current_etag = books[book_id]["etag"]
-            
-            if if_match != current_etag:
-                return jsonify({
-                    "error": "Precondition failed",
-                    "message": "The resource has been modified by another client"
-                }), 412
-        
-        del books[book_id]
-        return '', 204
+        return delete_book(book_id)
 
 # ==================== ZLECENIA - POST ONCE EXACTLY ====================
 
@@ -548,10 +596,33 @@ def book_resource(book_id):
 def orders_collection():
     """Zlecenia z obsługą idempotencji"""
     if request.method == 'GET':
-        return jsonify({
-            "data": list(orders.values()),
-            "total": len(orders)
-        })
+        # Użycie tej samej logiki paginacji co dla książek i autorów
+        try:
+            page = int(request.args.get('page', 1))
+            limit = int(request.args.get('limit', 10))
+        except ValueError:
+            return create_error_response("Invalid pagination parameters", 400,
+                                       "Parameters 'page' and 'limit' must be positive integers")
+
+        if page < 1 or limit < 1 or limit > 100:
+            return create_error_response("Invalid pagination parameters", 400,
+                                       "Page must be > 0 and limit must be between 1 and 100")
+
+        result = paginate_data(orders, page, limit)
+        response = jsonify(result)
+
+        # Budowanie nagłówka Link dla paginacji
+        links = []
+        base_url = request.base_url
+        pagination_info = result['pagination']
+
+        if pagination_info['has_next']:
+            links.append(f'<{base_url}?page={page + 1}&limit={limit}>; rel="next"')
+        if pagination_info['has_previous']:
+            links.append(f'<{base_url}?page={page - 1}&limit={limit}>; rel="prev"')
+        if links:
+            response.headers['Link'] = ', '.join(links)
+        return response, 200
     
     else:  # POST
         # Sprawdzenie klucza idempotencji
