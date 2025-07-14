@@ -152,6 +152,86 @@ def authors_collection():
         response.headers['Location'] = url_for('author_resource', author_id=author_id, _external=True)
         return response, 201
 
+@etag_precondition_check(resource_collection=authors, required=True)
+def update_author_put(author_id):
+    """Obsługuje logikę dla PUT /authors/{id} z wymaganym ETag."""
+    try:
+        data = request.get_json()
+    except Exception:
+        return create_error_response("Invalid JSON", 400)
+    
+    is_valid, error_msg = validate_author_data(data)
+    if not is_valid:
+        return create_error_response("Validation error", 400, error_msg)
+    
+    current_author = authors[author_id]
+    updated_author = {
+        "id": author_id,
+        "name": data['name'].strip(),
+        "created_at": current_author['created_at'],
+        "updated_at": datetime.now().isoformat()
+    }
+    
+    if 'bio' in data: updated_author['bio'] = data.get('bio', '').strip()
+    if 'birth_year' in data: updated_author['birth_year'] = data.get('birth_year')
+    
+    updated_author['etag'] = generate_etag(updated_author)
+    authors[author_id] = updated_author
+    
+    response = jsonify(updated_author)
+    response.headers['ETag'] = f'"{updated_author["etag"]}"'
+    return response, 200
+
+@etag_precondition_check(resource_collection=authors, required=False)
+def update_author_patch(author_id):
+    """Obsługuje logikę dla PATCH /authors/{id} z opcjonalnym ETag."""
+    try:
+        data = request.get_json()
+    except Exception:
+        return create_error_response("Invalid JSON", 400)
+    
+    if not data or not isinstance(data, dict):
+        return create_error_response("Request body must be a non-empty JSON object", 400)
+
+    current_author = authors[author_id].copy()
+    validation_errors = []
+
+    updatable_fields = {
+        'name': lambda v: isinstance(v, str) and v.strip(),
+        'bio': lambda v: isinstance(v, str) or v is None,
+        'birth_year': lambda v: isinstance(v, int) or v is None
+    }
+
+    for field, value in data.items():
+        if field in updatable_fields:
+            if updatable_fields[field](value):
+                if value is None:
+                    current_author.pop(field, None)
+                else:
+                    current_author[field] = value.strip() if isinstance(value, str) else value
+            else:
+                validation_errors.append(f"Invalid value for field '{field}'")
+
+    if validation_errors:
+        return create_error_response("Validation error", 400, ", ".join(validation_errors))
+
+    if 'name' not in current_author or not current_author.get('name'):
+        return create_error_response("Validation error", 400, "Field 'name' cannot be removed or empty")
+
+    current_author['updated_at'] = datetime.now().isoformat()
+    current_author['etag'] = generate_etag(current_author)
+    authors[author_id] = current_author
+
+    response = jsonify(current_author)
+    response.headers['ETag'] = f'"{current_author["etag"]}"'
+    return response, 200
+
+@etag_precondition_check(resource_collection=authors, required=False)
+def delete_author(author_id):
+    """Obsługuje logikę dla DELETE /authors/{id} z opcjonalnym ETag."""
+    del authors[author_id]
+    return '', 204
+
 @app.route('/api/v1/authors/<author_id>', methods=['GET', 'PUT', 'PATCH', 'DELETE'])
 def author_resource(author_id):
     """
@@ -174,108 +254,15 @@ def author_resource(author_id):
         return response, 200
     
     elif request.method == 'PUT':
-        # Pełna aktualizacja autora
-        try:
-            data = request.get_json()
-        except Exception:
-            return create_error_response("Invalid JSON", 400)
-        
-        # Walidacja danych
-        is_valid, error_msg = validate_author_data(data)
-        if not is_valid:
-            return create_error_response("Validation error", 400, error_msg)
-        
-        # Tworzenie zaktualizowanego autora
-        current_author = authors[author_id]
-        updated_author = {
-            "id": author_id,
-            "name": data['name'].strip(),
-            "created_at": current_author['created_at'],
-            "updated_at": datetime.now().isoformat()
-        }
-        
-        # Dodawanie opcjonalnych pól
-        if 'bio' in data and isinstance(data['bio'], str):
-            updated_author['bio'] = data['bio'].strip()
-        
-        if 'birth_year' in data and isinstance(data['birth_year'], int):
-            updated_author['birth_year'] = data['birth_year']
-        
-        # Generowanie nowego ETag
-        updated_author['etag'] = generate_etag(updated_author)
-        
-        # Zapisywanie w pamięci
-        authors[author_id] = updated_author
-        
-        response = jsonify(updated_author)
-        # Nagłówek Link: rel="self" jest teraz dodawany automatycznie przez hook @app.after_request
-        return response, 200
+        return update_author_put(author_id)
     
     elif request.method == 'PATCH':
-        # Częściowa aktualizacja autora
-        try:
-            data = request.get_json()
-        except Exception:
-            return create_error_response("Invalid JSON", 400)
-        
-        if not data:
-            return create_error_response("Request body is required", 400)
-        
-        current_author = authors[author_id].copy()
-        validation_errors = []
-        
-        # Definiujemy pola, które można aktualizować i ich walidację
-        updatable_fields = {
-            'name': lambda v: isinstance(v, str) and v.strip(),
-            'bio': lambda v: isinstance(v, str) or v is None,
-            'birth_year': lambda v: isinstance(v, int) or v is None
-        }
-
-        for field, value in data.items():
-            if field in updatable_fields:
-                if updatable_fields[field](value):
-                    if value is None:
-                        current_author.pop(field, None)
-                    else:
-                        current_author[field] = value.strip() if isinstance(value, str) else value
-                else:
-                    validation_errors.append(f"Invalid value for field '{field}'")
-            # Można dodać logikę ignorowania lub odrzucania nieznanych pól
-        
-        if validation_errors:
-            return create_error_response("Validation error", 400, ", ".join(validation_errors))
-
-        # Pole 'name' jest wymagane i nie może być usunięte
-        if 'name' not in current_author:
-             return create_error_response("Validation error", 400, "Field 'name' cannot be removed")
-        
-        # Aktualizujemy timestamp
-        current_author['updated_at'] = datetime.now().isoformat()
-        
-        # Generowanie nowego ETag
-        current_author['etag'] = generate_etag(current_author)
-        
-        # Zapisywanie w pamięci
-        authors[author_id] = current_author
-        
-        response = jsonify(current_author)
-        # Nagłówek Link: rel="self" jest teraz dodawany automatycznie przez hook @app.after_request
-        return response, 200
+        return update_author_patch(author_id)
     
     elif request.method == 'DELETE':
-        # Usuwanie autora
-        # Opcjonalne sprawdzenie ETag dla DELETE dla spójności z /books
-        if_match = request.headers.get('If-Match')
-        if if_match:
-            if_match = if_match.strip('"')
-            current_etag = authors[author_id]["etag"]
-            
-            if if_match != current_etag:
-                return create_error_response("Precondition Failed", 412,
-                                           "The resource has been modified by another client")
-
-        del authors[author_id]
-        return '', 204
+        # Używamy tej samej logiki co dla książek, z opcjonalnym ETag
+        # Wystarczy przenieść logikę do osobnej, udekorowanej funkcji
+        return delete_author(author_id)
 
 def validate_book_data(data):
     """Waliduje dane książki"""
