@@ -378,6 +378,30 @@ def etag_precondition_check(resource_collection, required=False):
         return decorated_function
     return decorator
 
+def idempotent_post(f):
+    """
+    Dekorator zapewniający idempotencję dla operacji POST.
+    Sprawdza nagłówek 'Idempotency-Key' i zwraca zapisaną odpowiedź, jeśli klucz był już użyty.
+    """
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        idempotency_key = request.headers.get('Idempotency-Key')
+
+        if idempotency_key and idempotency_key in idempotency_keys:
+            # Zwrócenie poprzedniej odpowiedzi z cache
+            cached_response = idempotency_keys[idempotency_key]
+            return jsonify(cached_response["data"]), cached_response["status"]
+
+        # Wywołanie oryginalnej funkcji, jeśli klucz jest nowy lub go nie ma
+        response, status_code = f(*args, **kwargs)
+
+        if idempotency_key and status_code in [200, 201, 202]:
+            # Zapisanie odpowiedzi w cache tylko dla udanych operacji
+            idempotency_keys[idempotency_key] = {"data": response.get_json(), "status": status_code}
+        
+        return response, status_code
+    return decorated_function
+
 # =============================================================================
 # KOLEKCJA KSIĄŻEK ZE STRONICOWANIEM
 # =============================================================================
@@ -592,6 +616,47 @@ def book_resource(book_id):
 
 # ==================== ZLECENIA - POST ONCE EXACTLY ====================
 
+@idempotent_post
+def create_order():
+    """Tworzy nowe zlecenie (logika dla POST /orders)"""
+    try:
+        data = request.get_json()
+    except Exception:
+        return create_error_response("Invalid JSON", 400)
+
+    if not data or not isinstance(data, dict):
+        return create_error_response("Invalid JSON payload", 400)
+
+    # Walidacja danych wejściowych zamówienia
+    book_id = data.get('bookId')
+    quantity = data.get('quantity')
+
+    if not book_id or book_id not in books:
+        return create_error_response("Not Found", 404, f"Book with id '{book_id}' not found.")
+
+    if not isinstance(quantity, int) or quantity <= 0:
+        return create_error_response("Validation error", 400, "Field 'quantity' must be a positive integer.")
+
+    # Logika biznesowa (np. sprawdzanie dostępności książek)
+    if books[book_id]['copies'] < quantity:
+        return create_error_response("Insufficient stock", 409, 
+                                   f"Not enough copies of '{books[book_id]['title']}'. Available: {books[book_id]['copies']}")
+    
+    order_id = str(uuid.uuid4())
+    order = {
+        **data,
+        "id": order_id,
+        "status": "created",
+        "created_at": datetime.now().isoformat()
+    }
+    # Zmniejszenie liczby dostępnych kopii
+    books[book_id]['copies'] -= quantity
+    orders[order_id] = order
+    
+    response = jsonify(order)
+    response.headers['Location'] = url_for('order_resource', order_id=order_id, _external=True)
+    return response, 201
+
 @app.route('/api/v1/orders', methods=['GET', 'POST'])
 def orders_collection():
     """Zlecenia z obsługą idempotencji"""
@@ -625,59 +690,7 @@ def orders_collection():
         return response, 200
     
     else:  # POST
-        # Sprawdzenie klucza idempotencji
-        idempotency_key = request.headers.get('Idempotency-Key')
-        
-        if idempotency_key and idempotency_key in idempotency_keys:
-            # Zwrócenie poprzedniej odpowiedzi
-            cached_response = idempotency_keys[idempotency_key]
-            response = jsonify(cached_response["data"])
-            return response, cached_response["status"]
-
-        try:
-            data = request.get_json()
-        except Exception:
-            return create_error_response("Invalid JSON", 400)
-
-        if not data or not isinstance(data, dict):
-            return create_error_response("Invalid JSON payload", 400)
-
-        # Walidacja danych wejściowych zamówienia
-        book_id = data.get('bookId')
-        quantity = data.get('quantity')
-
-        if not book_id or book_id not in books:
-            return create_error_response("Not Found", 404, f"Book with id '{book_id}' not found.")
-
-        if not isinstance(quantity, int) or quantity <= 0:
-            return create_error_response("Validation error", 400, "Field 'quantity' must be a positive integer.")
-
-        # Logika biznesowa (np. sprawdzanie dostępności książek)
-        if books[book_id]['copies'] < quantity:
-            return create_error_response("Insufficient stock", 409, 
-                                       f"Not enough copies of '{books[book_id]['title']}'. Available: {books[book_id]['copies']}")
-        
-        order_id = str(uuid.uuid4())
-        order = {
-            **data,
-            "id": order_id,
-            "status": "created",
-            "created_at": datetime.now().isoformat()
-        }
-        # Zmniejszenie liczby dostępnych kopii
-        books[book_id]['copies'] -= quantity
-        orders[order_id] = order
-        
-        # Zapisanie w cache idempotencji
-        if idempotency_key:
-            idempotency_keys[idempotency_key] = {
-                "data": order,
-                "status": 201
-            }
-        
-        response = jsonify(order)
-        response.headers['Location'] = url_for('order_resource', order_id=order_id, _external=True)
-        return response, 201
+        return create_order()
 
 @app.route('/api/v1/orders/<order_id>', methods=['GET'])
 def order_resource(order_id):
@@ -693,6 +706,7 @@ def order_resource(order_id):
 
 # ==================== KONTROLER - BULK UPDATE ====================
 
+@idempotent_post
 @app.route('/api/v1/batch/bulk-update', methods=['POST'])
 def bulk_update():
     """
@@ -705,7 +719,7 @@ def bulk_update():
 
     # Walidacja wejścia
     if not isinstance(book_ids, list) or not isinstance(updates, dict):
-        return jsonify({"error": "Invalid payload format"}), 400
+        return create_error_response("Invalid payload format", 400)
 
     updated_books = []
     not_found_ids = []
@@ -730,11 +744,12 @@ def bulk_update():
             not_found_ids.append(book_id)
 
     # Kompletny feedback o zmianach
-    return jsonify({
+    response_data = {
         "status": "Completed",
         "updated": updated_books,
         "notFound": not_found_ids
-    })
+    }
+    return jsonify(response_data), 200
 
 # =============================================================================
 # HOOKS - MODYFIKACJA ODPOWIEDZI
