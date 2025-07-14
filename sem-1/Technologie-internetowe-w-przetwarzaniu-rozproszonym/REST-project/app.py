@@ -708,33 +708,50 @@ def bulk_update():
     if not isinstance(book_ids, list) or not isinstance(updates, dict):
         return create_error_response("Invalid payload format", 400)
 
+    # Faza 1: Walidacja ("All or Nothing")
+    # Sprawdzamy, czy wszystkie książki istnieją. Jeśli nie, cała operacja jest odrzucana.
+    not_found_ids = [book_id for book_id in book_ids if book_id not in books]
+    if not_found_ids:
+        return create_error_response(
+            "Precondition Failed", 412,
+            f"Operation failed. The following books were not found: {not_found_ids}"
+        )
+
+    # Walidujemy pola i wartości w `updates` przed rozpoczęciem jakichkolwiek modyfikacji.
+    updatable_fields = {
+        'title': lambda v: isinstance(v, str) and v.strip(),
+        'author_id': lambda v: isinstance(v, str) and v.strip() and v in authors,
+        'copies': lambda v: isinstance(v, int) and v >= 0,
+        'isbn': lambda v: isinstance(v, str) or v is None,
+        'publication_year': lambda v: isinstance(v, int) or v is None,
+        'description': lambda v: isinstance(v, str) or v is None
+    }
+    
+    for field, value in updates.items():
+        if field not in updatable_fields:
+            return create_error_response(
+                "Validation error", 400, f"Field '{field}' cannot be updated."
+            )
+        if not updatable_fieldsfield:
+            return create_error_response(
+                "Validation error", 400, f"Invalid value provided for field '{field}'."
+            )
+
+    # Faza 2: Wykonanie (Commit)
+    # Jeśli walidacja przeszła pomyślnie, możemy bezpiecznie zaktualizować wszystkie zasoby.
     updated_books = []
-    not_found_ids = []
-
-    # Atomowość: w tym przypadku pętla jest wystarczająca,
-    # bo operujemy na słowniku w pamięci. W systemie z bazą danych
-    # należałoby użyć transakcji.
     for book_id in book_ids:
-        if book_id in books:
-            # Kopiujemy dane do aktualizacji, aby zapobiec modyfikacji kluczowych pól
-            safe_updates = updates.copy()
-            safe_updates.pop('id', None)
-            safe_updates.pop('created_at', None)
+        # Zastosuj bezpieczne aktualizacje i zaktualizuj metadane
+        books[book_id].update(updates)
+        books[book_id]['updated_at'] = datetime.now().isoformat()
+        books[book_id]['etag'] = generate_etag(books[book_id])
+        updated_books.append(books[book_id])
 
-            # Zastosuj bezpieczne aktualizacje i zaktualizuj datę modyfikacji
-            books[book_id].update(safe_updates)
-            books[book_id]['updated_at'] = datetime.now().isoformat()
-            # Zaktualizuj ETag po zmianie danych
-            books[book_id]['etag'] = generate_etag(books[book_id])
-            updated_books.append(books[book_id])
-        else:
-            not_found_ids.append(book_id)
-
-    # Kompletny feedback o zmianach
+    # Zwracamy odpowiedź potwierdzającą sukces całej operacji
     response_data = {
-        "status": "Completed",
-        "updated": updated_books,
-        "notFound": not_found_ids
+        "status": "Completed successfully",
+        "updated_count": len(updated_books),
+        "updated_books": updated_books
     }
     return jsonify(response_data), 200
 
