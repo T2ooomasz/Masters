@@ -110,6 +110,27 @@
 									"    pm.expect(responseData.id).to.eql(expectedId);",
 									"    pm.expect(responseData.name).to.eql(\"Fyodor Dostoevsky\");",
 									"});"
+									,
+									"",
+									"// Test 4: Validate the JSON schema of the response",
+									"pm.test(\"Response body matches the author schema\", function () {",
+									"    const authorSchema = {",
+									"        \"type\": \"object\",",
+									"        \"properties\": {",
+									"            \"id\": { \"type\": \"string\", \"pattern\": \"^[0-9a-f\\\\-]+\" },",
+									"            \"name\": { \"type\": \"string\" },",
+									"            \"bio\": { \"type\": [\"string\", \"null\"] },",
+									"            \"birth_year\": { \"type\": [\"integer\", \"null\"] },",
+									"            \"created_at\": { \"type\": \"string\", \"format\": \"date-time\" },",
+									"            \"updated_at\": { \"type\": \"string\", \"format\": \"date-time\" },",
+									"            \"etag\": { \"type\": \"string\" }",
+									"        },",
+									"        \"required\": [\"id\", \"name\", \"created_at\", \"updated_at\", \"etag\"]",
+									"    };",
+									"",
+									"    const responseData = pm.response.json();",
+									"    pm.expect(responseData).to.have.jsonSchema(authorSchema);",
+									"});"
 								],
 								"type": "text/javascript"
 							}
@@ -258,7 +279,7 @@
 									"});",
 									"",
 									"pm.test(\"Response body is empty\", function () {",
-									"    pm.response.to.be.withBody;",
+									"    pm.expect(pm.response.text()).to.eql('');",
 									"    pm.response.to.have.body(\"\");",
 									"});"
 								],
@@ -959,6 +980,481 @@
 						}
 					},
 					"response": []
+				}
+			]
+		},
+		{
+			"name": "Validation & Error Handling",
+			"description": "Tests for various validation rules and error conditions (4xx status codes).",
+			"item": [
+				{
+					"name": "[POST /authors] Fail - Missing Name",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 400 Bad Request\", () => {",
+									"    pm.response.to.have.status(400);",
+									"});",
+									"",
+									"pm.test(\"Error response indicates missing field\", () => {",
+									"    const res = pm.response.json();",
+									"    pm.expect(res.error).to.eql(\"Validation error\");",
+									"    pm.expect(res.details).to.include(\"name' is required\");",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"bio\": \"An author without a name.\",\n    \"birth_year\": 2000\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/authors",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"authors"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "[POST /authors] Fail - Invalid Data Type for Name",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 400 Bad Request\", () => {",
+									"    pm.response.to.have.status(400);",
+									"});",
+									"",
+									"pm.test(\"Error response indicates invalid data type\", () => {",
+									"    const res = pm.response.json();",
+									"    pm.expect(res.error).to.eql(\"Validation error\");",
+									"    pm.expect(res.details).to.include(\"must be a non-empty string\");",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"name\": 12345,\n    \"bio\": \"Name is a number, which is wrong.\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/authors",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"authors"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "[POST /books] Fail - Non-existent Author ID",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 400 Bad Request\", () => {",
+									"    pm.response.to.have.status(400);",
+									"});",
+									"",
+									"pm.test(\"Error response indicates author does not exist\", () => {",
+									"    const res = pm.response.json();",
+									"    pm.expect(res.error).to.eql(\"Validation error\");",
+									"    pm.expect(res.details).to.include(\"does not exist\");",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"title\": \"Book with a ghost author\",\n    \"author_id\": \"ghost-author-123\",\n    \"copies\": 1\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/books",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"books"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "[POST /orders] Fail - Insufficient Stock",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 409 Conflict\", () => {",
+									"    pm.response.to.have.status(409);",
+									"});",
+									"",
+									"pm.test(\"Error response indicates insufficient stock\", () => {",
+									"    const res = pm.response.json();",
+									"    pm.expect(res.error).to.eql(\"Insufficient stock\");",
+									"    pm.expect(res.details).to.include(\"Not enough copies\");",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Idempotency-Key",
+								"value": "{{$guid}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"bookId\": \"{{createdBookId}}\",\n    \"quantity\": 9999\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/orders",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"orders"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "[POST /batch] Fail - Invalid Payload Format",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 400 Bad Request\", () => {",
+									"    pm.response.to.have.status(400);",
+									"});",
+									"",
+									"pm.test(\"Error response indicates invalid payload format\", () => {",
+									"    const res = pm.response.json();",
+									"    pm.expect(res.error).to.eql(\"Invalid payload format\");",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"bookIds\": \"this-is-not-an-array\",\n    \"updates\": {\n        \"copies\": 10\n    }\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/batch/bulk-update",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"batch",
+								"bulk-update"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "[POST /batch] Fail - Invalid Update Field",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 400 Bad Request\", () => {",
+									"    pm.response.to.have.status(400);",
+									"});",
+									"",
+									"pm.test(\"Error response indicates field cannot be updated\", () => {",
+									"    const res = pm.response.json();",
+									"    pm.expect(res.error).to.eql(\"Validation error\");",
+									"    pm.expect(res.details).to.include(\"cannot be updated\");",
+									"    pm.expect(res.details).to.include(\"'id'\"); // Check that it names the invalid field",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"bookIds\": [\"{{createdBookId}}\"],\n    \"updates\": {\n        \"id\": \"cannot-change-id\",\n        \"copies\": 5\n    }\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/batch/bulk-update",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"batch",
+								"bulk-update"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "End-to-End Scenarios",
+			"description": "Complex tests that involve multiple requests and resources to verify data integrity and business logic.",
+			"item": [
+				{
+					"name": "Cascade Delete: Author and Books",
+					"item": [
+						{
+							"name": "[SETUP] Create Author for Cascade Test",
+							"event": [
+								{
+									"listen": "test",
+									"script": {
+										"exec": [
+											"pm.test(\"Status code is 201 Created\", () => pm.response.to.have.status(201));",
+											"const res = pm.response.json();",
+											"pm.collectionVariables.set(\"cascadeAuthorId\", res.id);",
+											"pm.collectionVariables.set(\"cascadeAuthorEtag\", res.etag);"
+										],
+										"type": "text/javascript"
+									}
+								}
+							],
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"name\": \"Author to be Deleted\",\n    \"bio\": \"This author exists only to test cascade deletion.\",\n    \"birth_year\": 1950\n}"
+								},
+								"url": {
+									"raw": "{{baseUrl}}/authors",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"authors"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "[SETUP] Create Book for This Author",
+							"event": [
+								{
+									"listen": "test",
+									"script": {
+										"exec": [
+											"pm.test(\"Status code is 201 Created\", () => pm.response.to.have.status(201));",
+											"const res = pm.response.json();",
+											"pm.collectionVariables.set(\"cascadeBookId\", res.id);"
+										],
+										"type": "text/javascript"
+									}
+								}
+							],
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"title\": \"Book to be Deleted by Cascade\",\n    \"author_id\": \"{{cascadeAuthorId}}\",\n    \"copies\": 1\n}"
+								},
+								"url": {
+									"raw": "{{baseUrl}}/books",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"books"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "[ACTION] Delete the Author",
+							"event": [
+								{
+									"listen": "test",
+									"script": {
+										"exec": [
+											"pm.test(\"Status code is 204 No Content\", () => {",
+											"    pm.response.to.have.status(204);",
+											"});"
+										],
+										"type": "text/javascript"
+									}
+								}
+							],
+							"request": {
+								"method": "DELETE",
+								"header": [
+									{
+										"key": "If-Match",
+										"value": "\"{{cascadeAuthorEtag}}\""
+									}
+								],
+								"url": {
+									"raw": "{{baseUrl}}/authors/{{cascadeAuthorId}}",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"authors",
+										"{{cascadeAuthorId}}"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "[VERIFY] Check Book is Also Deleted (404)",
+							"event": [
+								{
+									"listen": "test",
+									"script": {
+										"exec": [
+											"pm.test(\"Status code is 404 Not Found for the book\", () => {",
+											"    pm.response.to.have.status(404);",
+											"});",
+											"",
+											"pm.test(\"Error response confirms book is not found\", () => {",
+											"    const res = pm.response.json();",
+											"    pm.expect(res.error).to.eql(\"Book not found\");",
+											"});"
+										],
+										"type": "text/javascript"
+									}
+								}
+							],
+							"request": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{baseUrl}}/books/{{cascadeBookId}}",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"books",
+										"{{cascadeBookId}}"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "[VERIFY] Check Author is Deleted (404)",
+							"event": [
+								{
+									"listen": "test",
+									"script": {
+										"exec": [
+											"pm.test(\"Status code is 404 Not Found for the author\", () => {",
+											"    pm.response.to.have.status(404);",
+											"});"
+										],
+										"type": "text/javascript"
+									}
+								}
+							],
+							"request": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{baseUrl}}/authors/{{cascadeAuthorId}}",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"authors",
+										"{{cascadeAuthorId}}"
+									]
+								}
+							},
+							"response": []
+						}
+					]
 				}
 			]
 		}
