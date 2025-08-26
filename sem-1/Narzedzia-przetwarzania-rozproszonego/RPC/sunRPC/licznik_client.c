@@ -1,97 +1,54 @@
-/*
- * licznik_client.c - Klient dla zdalnego licznika
- */
-
 #include "licznik.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-void test_licznika(char *host)
+void licznik_prog_1(char *host, char *op, int val)
 {
-    CLIENT *clnt;  // Wskaźnik na strukturę klienta RPC
-    int *wynik;
-    int wartosc;
+	CLIENT *clnt;
+	int  *result;
 
-    printf("=== Klient RPC - Test zdalnego licznika ===\n");
-    printf("Łączenie z serwerem: %s\n\n", host);
-    
-    /* Utworzenie klienta RPC 
-     * - host: adres serwera
-     * - LICZNIK: numer programu (z licznik.x)
-     * - V1: wersja programu (z licznik.x) 
-     * - "udp": protokół transportowy
-     */
-    clnt = clnt_create(host, LICZNIK, V1, "udp");
-    if (clnt == NULL) {
-        clnt_pcreateerror(host);
-        printf("Błąd: Nie można połączyć się z serwerem RPC\n");
+#ifndef	DEBUG
+	clnt = clnt_create (host, LICZNIK_PROG, V1, "udp");
+	if (clnt == NULL) {
+		clnt_pcreateerror (host);
+		exit (1);
+	}
+#endif	/* DEBUG */
+
+    if (strcmp(op, "zwieksz") == 0) {
+	    result = zwieksz_1(&val, clnt);
+    } else if (strcmp(op, "zmniejsz") == 0) {
+        result = zmniejsz_1(&val, clnt);
+    } else {
+        fprintf(stderr, "Unknown operation: %s\n", op);
         exit(1);
     }
 
-    /* Test 1: Zwiększenie o 5 */
-    wartosc = 5;
-    printf("Klient: Wywołuję zwieksz(%d)\n", wartosc);
-    wynik = zwieksz_1(&wartosc, clnt);
-    if (wynik == NULL) {
-        clnt_perror(clnt, "Błąd wywołania zwieksz");
-    } else {
-        printf("Klient: Otrzymałem wynik: %d\n\n", *wynik);
-    }
-
-    /* Test 2: Zwiększenie o 10 */
-    wartosc = 10;
-    printf("Klient: Wywołuję zwieksz(%d)\n", wartosc);
-    wynik = zwieksz_1(&wartosc, clnt);
-    if (wynik == NULL) {
-        clnt_perror(clnt, "Błąd wywołania zwieksz");
-    } else {
-        printf("Klient: Otrzymałem wynik: %d\n\n", *wynik);
-    }
-
-    /* Test 3: Zmniejszenie o 3 */
-    wartosc = 3;
-    printf("Klient: Wywołuję zmniejsz(%d)\n", wartosc);
-    wynik = zmniejsz_1(&wartosc, clnt);
-    if (wynik == NULL) {
-        clnt_perror(clnt, "Błąd wywołania zmniejsz");
-    } else {
-        printf("Klient: Otrzymałem wynik: %d\n\n", *wynik);
-    }
-
-    /* Test 4: Zmniejszenie o 7 */
-    wartosc = 7;
-    printf("Klient: Wywołuję zmniejsz(%d)\n", wartosc);
-    wynik = zmniejsz_1(&wartosc, clnt);
-    if (wynik == NULL) {
-        clnt_perror(clnt, "Błąd wywołania zmniejsz");
-    } else {
-        printf("Klient: Otrzymałem wynik: %d\n\n", *wynik);
-    }
-
-    /* Test 5: Zwiększenie o 20 */
-    wartosc = 20;
-    printf("Klient: Wywołuję zwieksz(%d)\n", wartosc);
-    wynik = zwieksz_1(&wartosc, clnt);
-    if (wynik == NULL) {
-        clnt_perror(clnt, "Błąd wywołania zwieksz");
-    } else {
-        printf("Klient: Otrzymałem wynik: %d\n\n", *wynik);
-    }
-
-    /* Zwolnienie zasobów klienta */
-    clnt_destroy(clnt);
-    printf("Klient: Połączenie z serwerem zakończone\n");
+	if (result == (int *) NULL) {
+		clnt_perror (clnt, "call failed");
+	} else {
+		printf("wynik = %d\n", *result);
+	}
+#ifndef	DEBUG
+	clnt_destroy (clnt);
+#endif	 /* DEBUG */
 }
 
-int main(int argc, char *argv[])
+
+int main (int argc, char *argv[])
 {
-    if (argc != 2) {
-        printf("Użycie: %s <adres_serwera>\n", argv[0]);
-        printf("Przykład: %s localhost\n", argv[0]);
-        exit(1);
-    }
-    
-    uruchom_klienta(argv[1]);
-    return 0;
+	char *host;
+    char *op;
+    int val;
+
+	if (argc < 4) {
+		printf ("usage: %s server_host operation value\n", argv[0]);
+		exit (1);
+	}
+	host = argv[1];
+    op = argv[2];
+    val = atoi(argv[3]);
+	licznik_prog_1 (host, op, val);
+exit (0);
 }
