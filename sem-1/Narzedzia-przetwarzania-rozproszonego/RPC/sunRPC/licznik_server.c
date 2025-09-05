@@ -9,11 +9,14 @@
 int *
 zwieksz_1_svc(int *argp, struct svc_req *rqstp)
 {
-	static int  result;
+	static int result;
 
-	/*
-	 * insert server code here
-	 */
+	printf("Otrzymano żądanie: zwieksz o %d\n", *argp);
+	
+	licznik_val = licznik_val + *argp; // Zwiększamy wartość licznika
+	result = licznik_val;             // Przypisujemy nową wartość do wyniku
+
+	printf("Aktualna wartość licznika: %d\n", result);
 
 	return &result;
 }
@@ -23,9 +26,12 @@ zmniejsz_1_svc(int *argp, struct svc_req *rqstp)
 {
 	static int  result;
 
-	/*
-	 * insert server code here
-	 */
+	printf("Otrzymano żądanie: zmniejsz o %d\n", *argp);
+	
+	licznik_val = licznik_val - *argp; // Zmniejszamy wartość licznika
+	result = licznik_val;             // Przypisujemy nową wartość do wyniku
+
+	printf("Aktualna wartość licznika: %d\n", result);
 
 	return &result;
 }
