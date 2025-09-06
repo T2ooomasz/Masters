@@ -16,7 +16,7 @@ using grpc::Status;
 // Implementacja serwisu Licznik
 class LicznikServiceImpl final : public Licznik::Service {
 private:
-    int licznik_wartosc = 0;  // Stan licznika
+    int32_t licznik_wartosc = 0;  // Stan licznika
 
 public:
     // Implementacja metody zwieksz

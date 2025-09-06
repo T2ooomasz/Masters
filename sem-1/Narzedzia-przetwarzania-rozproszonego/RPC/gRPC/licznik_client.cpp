@@ -41,7 +41,7 @@ public:
         : stub_(Licznik::NewStub(channel)) {}
 
     // Wywołanie metody zwieksz
-    int Zwieksz(int wartosc) {
+    int32_t Zwieksz(int32_t wartosc) {
         Wartosc request;
         request.set_wartosc(wartosc);
 
@@ -60,7 +60,7 @@ public:
     }
 
     // Wywołanie metody zmniejsz
-    int Zmniejsz(int wartosc) {
+    int32_t Zmniejsz(int32_t wartosc) {
         Wartosc request;
         request.set_wartosc(wartosc);
 
@@ -128,10 +128,10 @@ int main(int argc, char** argv) {
             // Parsowanie operacji
             std::istringstream iss(linia);
             char operatorChar;
-            int wartosc;
+            int32_t wartosc;
             
             if (iss >> operatorChar >> wartosc) {
-                int wynik;
+                int32_t wynik;
                 if (operatorChar == '+') {
                     std::cout << "Wywoluje zwieksz(" << wartosc << ")" << std::endl;
                     wynik = licznik.Zwieksz(wartosc);
