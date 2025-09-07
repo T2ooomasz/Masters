@@ -1,4 +1,5 @@
 // LicznikSerwer.java - Serwer
+import java.rmi.Naming;
 import java.rmi.RemoteException;
 import java.rmi.registry.LocateRegistry;
 import java.rmi.registry.Registry;
@@ -8,44 +9,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 /**
  * Implementacja serwera zdalnego licznika
  */
-public class LicznikSerwer implements LicznikInterface {
-    // Używamy AtomicInteger dla thread-safety
-    private final AtomicInteger wartoscLicznika = new AtomicInteger(0);
-    
-    public LicznikSerwer() throws RemoteException {
-        super();
-    }
-    
-    @Override
-    public int zwieksz(int wartosc) throws RemoteException {
-        System.out.printf("[SERWER] Zwiekszanie licznika o: %d%n", wartosc);
-        int nowaWartosc = wartoscLicznika.addAndGet(wartosc);
-        System.out.printf("[SERWER] Nowa wartosc: %d%n", nowaWartosc);
-        return nowaWartosc;
-    }
-    
-    @Override
-    public int zmniejsz(int wartosc) throws RemoteException {
-        System.out.printf("[SERWER] Zmniejszanie licznika o: %d%n", wartosc);
-        int nowaWartosc = wartoscLicznika.addAndGet(-wartosc);
-        System.out.printf("[SERWER] Nowa wartosc: %d%n", nowaWartosc);
-        return nowaWartosc;
-    }
-    
-    @Override
-    public int pobierzWartosc() throws RemoteException {
-        int wartosc = wartoscLicznika.get();
-        System.out.printf("[SERWER] Pobieranie wartosci: %d%n", wartosc);
-        return wartosc;
-    }
-    
-    @Override
-    public int reset() throws RemoteException {
-        System.out.println("[SERWER] Resetowanie licznika do 0");
-        wartoscLicznika.set(0);
-        return 0;
-    }
-    
+public class LicznikSerwer {
     public static void main(String[] args) {
         try {
             
@@ -63,13 +27,13 @@ public class LicznikSerwer implements LicznikInterface {
             Registry registry = LocateRegistry.createRegistry(port);
             
             // Tworzenie instancji serwera
-            LicznikSerwer serwer = new LicznikSerwer();
+            LicznikImpl licznik = new LicznikImpl();
             
             // Eksportowanie obiektu
-            LicznikInterface stub = (LicznikInterface) UnicastRemoteObject.exportObject(serwer, 0);
+            // LicznikInterface stub = (LicznikInterface) UnicastRemoteObject.exportObject(serwer, 0);
             
             // Rejestracja obiektu w rejestrze
-            registry.rebind("Licznik", stub);
+            registry.rebind("Licznik", licznik);
             
             System.out.println("=== Serwer RMI - Zdalny Licznik ===");
             System.out.printf("Serwer nasłuchuje na porcie %d%n", port);
