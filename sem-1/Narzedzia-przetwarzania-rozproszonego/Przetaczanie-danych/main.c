@@ -36,49 +36,39 @@ void print_student(const Student *student) {
 int main() {
     printf("=== DEMO: System XDR dla studentów ===\n\n");
     
-    /* === TWORZENIE STUDENTA 1 (numer albumu) === */
-    Student student1;
-    memset(&student1, 0, sizeof(Student));
-    
-    // Identyfikator - numer albumu
-    student1.identyfikator.typ = NUMER_ALBUMU;
-    student1.identyfikator.IdentyfikatorStudenta_u.numer_albumu = 12345;
-    
-    // Dane osobowe
-    student1.nazwisko = strdup("Kowalski");
-    student1.imie = strdup("Jan");
-    
-    // Oceny
-    Ocena oceny1[] = {DB, BDB, DST_P};
-    student1.oceny.oceny_len = 3;
-    student1.oceny.oceny_val = malloc(3 * sizeof(Ocena));
-    memcpy(student1.oceny.oceny_val, oceny1, 3 * sizeof(Ocena));
-    
-    /* === TWORZENIE STUDENTA 2 (email) === */
-    Student student2;
-    memset(&student2, 0, sizeof(Student));
-    
-    // Identyfikator - email
-    student2.identyfikator.typ = ADRES_EMAIL;
-    student2.identyfikator.IdentyfikatorStudenta_u.email = 
-        strdup("anna.nowak@student.pw.edu.pl");
-    
-    // Dane osobowe
-    student2.nazwisko = strdup("Nowak");
-    student2.imie = strdup("Anna");
-    
-    // Oceny
-    Ocena oceny2[] = {BDB, BDB, DB_P, BDB};
-    student2.oceny.oceny_len = 4;
-    student2.oceny.oceny_val = malloc(4 * sizeof(Ocena));
-    memcpy(student2.oceny.oceny_val, oceny2, 4 * sizeof(Ocena));
-    
     /* === TWORZENIE LISTY STUDENTÓW === */
     ListaStudentow lista;
+    memset(&lista, 0, sizeof(ListaStudentow));
     lista.ListaStudentow_len = 2;
     lista.ListaStudentow_val = malloc(2 * sizeof(Student));
-    lista.ListaStudentow_val[0] = student1;
-    lista.ListaStudentow_val[1] = student2;
+    if (!lista.ListaStudentow_val) {
+        perror("malloc failed");
+        return 1;
+    }
+    memset(lista.ListaStudentow_val, 0, 2 * sizeof(Student));
+
+    /* === WYPEŁNIANIE STUDENTA 1 (numer albumu) === */
+    Student *student1 = &lista.ListaStudentow_val[0];
+    student1->identyfikator.typ = NUMER_ALBUMU;
+    student1->identyfikator.IdentyfikatorStudenta_u.numer_albumu = 12345;
+    student1->nazwisko = strdup("Kowalski");
+    student1->imie = strdup("Jan");
+    Ocena oceny1[] = {DB, BDB, DST_P};
+    student1->oceny.oceny_len = 3;
+    student1->oceny.oceny_val = malloc(3 * sizeof(Ocena));
+    memcpy(student1->oceny.oceny_val, oceny1, 3 * sizeof(Ocena));
+    
+    /* === WYPEŁNIANIE STUDENTA 2 (email) === */
+    Student *student2 = &lista.ListaStudentow_val[1];
+    student2->identyfikator.typ = ADRES_EMAIL;
+    student2->identyfikator.IdentyfikatorStudenta_u.email = 
+        strdup("anna.nowak@student.pw.edu.pl");
+    student2->nazwisko = strdup("Nowak");
+    student2->imie = strdup("Anna");
+    Ocena oceny2[] = {BDB, BDB, DB_P, BDB};
+    student2->oceny.oceny_len = 4;
+    student2->oceny.oceny_val = malloc(4 * sizeof(Ocena));
+    memcpy(student2->oceny.oceny_val, oceny2, 4 * sizeof(Ocena));
     
     printf("Utworzono listę %u studentów:\n", lista.ListaStudentow_len);
     for (u_int i = 0; i < lista.ListaStudentow_len; i++) {
@@ -164,16 +154,8 @@ int main() {
     printf("\n=== SUKCES! System XDR działa poprawnie ===\n");
     
     /* === ZWOLNIENIE PAMIĘCI === */
-    // Zwolnienie oryginalnej listy
-    free(student1.nazwisko);
-    free(student1.imie);
-    free(student1.oceny.oceny_val);
-    free(student2.nazwisko);
-    free(student2.imie);
-    free(student2.identyfikator.IdentyfikatorStudenta_u.email);
-    free(student2.oceny.oceny_val);
-    free(lista.ListaStudentow_val);
-    
+    // Zwolnienie oryginalnej listy (rpcgen używa xdr_free)
+    xdr_free((xdrproc_t)xdr_ListaStudentow, (char*)&lista);
     // Zwolnienie wczytanej listy (rpcgen używa xdr_free)
     xdr_free((xdrproc_t)xdr_ListaStudentow, (char*)&loaded_lista);
     
