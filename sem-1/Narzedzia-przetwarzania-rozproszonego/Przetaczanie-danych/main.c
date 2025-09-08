@@ -112,6 +112,7 @@ int main() {
     fp = fopen("studenci.dat", "rb");
     if (!fp) {
         printf("Błąd: nie można otworzyć pliku do odczytu!\n");
+        printf("Sprawdź czy plik studenci.dat został utworzony.\n");
         return 1;
     }
     
