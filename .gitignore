@@ -2,3 +2,18 @@
 *.json0
 *.class
 *.pyc
+# Wirtualne środowiska
+venv/
+.venv/
+env/
+.env/
+
+# Pliki cache Pythona
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Pliki generowane przez edytory
+.vscode/
+.idea/
