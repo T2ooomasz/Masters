@@ -1,4 +1,10 @@
 /* main.c - Poprawny przykład użycia z rpcgen */
+/*
+* compile:
+* gcc -I/usr/include/tirpc -D_RPC_AUTH_DES_H -o program main.c studenci_xdr.c -ltirpc
+* run:
+* ./program
+*/
 
 #include <stdio.h>
 #include <stdlib.h>
