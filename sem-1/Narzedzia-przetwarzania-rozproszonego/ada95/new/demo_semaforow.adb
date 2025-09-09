@@ -68,30 +68,30 @@ procedure Demo_Semaforow is
       
       task body Zadanie_Uogolnione is
          -- Ograniczamy zakres losowości, aby uniknąć deadlocka
-         subtype Losowy_Zakres is Positive range 1 .. 1;  -- Maksymalnie 2 zasoby
-         package Losowe_Zasoby is new Ada.Numerics.Discrete_Random(Losowy_Zakres);
-         Gen : Losowe_Zasoby.Generator;
-         Ile_Potrzeba : Positive;
+         -- subtype Losowy_Zakres is Positive range 1 .. 1;  -- Maksymalnie 2 zasoby
+         -- package Losowe_Zasoby is new Ada.Numerics.Discrete_Random(Losowy_Zakres);
+         -- Gen : Losowe_Zasoby.Generator;
+         -- Ile_Potrzeba : Positive;
          My_ID : constant Task_Id := Current_Task;
       begin
-         Losowe_Zasoby.Reset(Gen);
-         Ile_Potrzeba := Losowe_Zasoby.Random(Gen);
+         -- Losowe_Zasoby.Reset(Gen);
+         -- Ile_Potrzeba := Losowe_Zasoby.Random(Gen);
          
-         Put_Line("Zadanie " & Image(My_ID) & " potrzebuje" & Positive'Image(Ile_Potrzeba) & " zasobów.");
+         Put_Line("Zadanie " & Image(My_ID) & " potrzebuje" & " 1 " & " zasobów.");
          
-         Pula_Zasobow.P(Ile_Potrzeba); -- Poproś o 'Ile_Potrzeba' zasobów.
+         Pula_Zasobow.P; -- (Ile_Potrzeba); -- Poproś o 'Ile_Potrzeba' zasobów.
          
          -- Posiadamy zasoby, wykonujemy pracę
          Put_Line("!!! Zadanie " & Image(My_ID) & " dostało zasoby i pracuje... !!!");
          delay 0.2; -- Symulacja pracy
          
-         Pula_Zasobow.V(Ile_Potrzeba); -- Zwróć zasoby do puli.
+         Pula_Zasobow.V; -- (Ile_Potrzeba); -- Zwróć zasoby do puli.
          
          Put_Line("Zadanie " & Image(My_ID) & " zakończyło pracę i zwróciło zasoby.");
       end Zadanie_Uogolnione;
       
       -- Tworzymy tablicę zadań - proste i działa
-      Zadania : array (1 .. 4) of Zadanie_Uogolnione;
+      Zadania : array (1 .. 6) of Zadanie_Uogolnione;
       
    begin
       Put_Line("=== Utworzono zadania dla semafora uogólnionego ===");
