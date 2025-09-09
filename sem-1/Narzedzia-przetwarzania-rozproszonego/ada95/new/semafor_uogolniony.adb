@@ -8,10 +8,14 @@ package body Semafor_Uogolniony is
    
    protected body Counting_Semaphore is
       
-      entry P (Ile : Positive) when Count >= Ile is
+      entry P (Ile : Positive) when Count >= 0 is
       begin
-         Count := Count - Ile;
-         Ada.Text_IO.Put_Line("Zasób zajęty. Pozostało:" & Natural'Image(Count));
+         if Count >= Ile then
+            Count := Count - Ile;
+            Ada.Text_IO.Put_Line("Zasób zajęty. Pozostało:" & Natural'Image(Count));
+         else
+         requeue P;
+         end if;
       end P;
       
       procedure V (Ile : Positive) is

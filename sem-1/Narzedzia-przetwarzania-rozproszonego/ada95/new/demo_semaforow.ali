@@ -24,7 +24,7 @@ RV NO_IMPLICIT_LOOPS
 RV MAX_TASKS=1+
 RV MAX_ENTRY_QUEUE_LENGTH=1+
 
-U demo_semaforow%b	demo_semaforow.adb	7d290b64 NE OO SU
+U demo_semaforow%b	demo_semaforow.adb	1471119e NE OO SU
 W ada%s			ada.ads			ada.ali
 Z ada.calendar.delays%s	a-caldel.adb		a-caldel.ali
 Z ada.exceptions%s	a-except.adb		a-except.ali
@@ -71,7 +71,7 @@ D a-tags.ads		20240521074738 9eaa38c6 ada.tags%s
 D a-taside.ads		20240521074737 c0a7c8d8 ada.task_identification%s
 D a-textio.ads		20240521074738 5c2c6153 ada.text_io%s
 D a-unccon.ads		20240521074738 0e9b276f ada.unchecked_conversion%s
-D demo_semaforow.adb	20250909074424 1445c3e8 demo_semaforow%b
+D demo_semaforow.adb	20250909095311 7d1dd912 demo_semaforow%b
 D interfac.ads		20240521074738 15f799c2 interfaces%s
 D i-c.ads		20240521074738 5c5a6c17 interfaces.c%s
 D i-cstrea.ads		20240521074738 e53d8b8e interfaces.c_streams%s
@@ -131,59 +131,63 @@ D s-widthu.ads		20240521074738 b32f15e2 system.width_u%s
 G a e
 G c Z b b [demo_semaforow standard 16 11 none]
 G r s binary_semaphore [demo_semaforow standard 16 11 none] [binary_semaphoreVIP semafor_ogolny 4 4 none]
-G r s counting_semaphore [demo_semaforow standard 16 11 none] [counting_semaphoreVIP semafor_uogolniony 4 4 none]
 G r o none [demo_semaforow standard 16 11 none] [p semafor_ogolny__binary_semaphore 8 13 none]
 G r p none [demo_semaforow standard 16 11 none] [v semafor_ogolny__binary_semaphore 12 17 none]
+G r s counting_semaphore [demo_semaforow standard 16 11 none] [counting_semaphoreVIP semafor_uogolniony 4 4 none]
 G r o none [demo_semaforow standard 16 11 none] [p semafor_uogolniony__counting_semaphore 7 13 none]
 G r p none [demo_semaforow standard 16 11 none] [v semafor_uogolniony__counting_semaphore 11 17 none]
 X 1 ada.ads
-16K9*Ada 20e8 22|8r6 8r38 9r6 10r6 10r38 62r36
+16K9*Ada 20e8 22|8r6 8r38 9r6 10r6 10r38 72r39
 X 8 a-numeri.ads
-16K13*Numerics 35e17 22|9r10 62r40
+16K13*Numerics 35e17 22|9r10 72r43
 X 11 a-nudira.ads
-44k22*Discrete_Random 81e33 22|9w19 62r49
-50R9 Generator<49|65R9> 22|63r27[62]
-52V13 Random{integer} 22|68s37[62]
-61U14 Reset<49|103p14> 22|67s21[62]
+44k22*Discrete_Random 81e33 22|9w19 72r52
+50R9 Generator<49|65R9> 22|73r30[72]
+52V13 Random{integer} 22|78s40[72]
+61U14 Reset<49|103p14> 22|77s24[72]
 X 12 a-nudira.adb
-53V16 Random[49|86]{integer} 50|402b13[22|62]
-65V16 Random[49|86]{integer} 50|402b13[22|62]
+53V16 Random[49|86]{integer} 50|402b13[22|72]
+65V16 Random[49|86]{integer} 50|402b13[22|72]
 X 19 a-taside.ads
 45K13*Task_Identification 106e28 22|10w10 10r42
-53P9*Task_Id<62|109P9> 22|30r24 65r24
-62V13*Image{string} 22|32s29 38s33 44s29 70s29 75s33 80s29
-65V13*Current_Task{53P9} 22|30s35 65s35
+53P9*Task_Id<62|109P9> 22|31r27 75r27
+62V13*Image{string} 22|33s32 39s36 41s36 46s32 80s32 85s36 90s32
+65V13*Current_Task{53P9} 22|31s38 75s38
 X 20 a-textio.ads
 58K13*Text_IO 787e16 22|8w10 8r42
-282U14*New_Line 22|87s4 91s4 97s4
-566U14*Put_Line 22|32s7 38s7 44s7 70s7 75s7 80s7 88s4 92s4 98s4
+282U14*New_Line 22|102s4 107s4 112s4 117s4 120s4 126s4 131s4 134s4
+566U14*Put_Line 22|33s10 39s10 41s10 46s10 53s7 80s10 85s10 90s10 97s7 103s4
+. 104s4 105s4 106s4 109s4 110s4 111s4 118s4 119s4 123s4 124s4 125s4 132s4
+. 133s4 135s4 136s4 137s4
 X 22 demo_semaforow.adb
-16U11*Demo_Semaforow 16b11 101l5 101t19
-23w4 Mutex{26|4W19} 34r7 42r7
-26T14 Zadanie_Binarne 29b14 45l8 45t23 48r34
-30p7 My_ID{19|53P9} 32r35 38r39 44r35
-48a4 Zadania_1(26T14)
-55w4 Pula_Zasobow{27|4W19} 72r7 78r7
-58T14 Zadanie_Uogolnione 60b14 81l8 81t26 84r34
-61I15 Losowy_Zakres{positive} 62r65
-62K15 Losowe_Zasoby[11|44] 63r13 67r7 68r23
-63r7 Gen{11|50R9[62]} 67r27 68r44
-64i7 Ile_Potrzeba{positive} 68m7 70r76 72r22 78r22
-65p7 My_ID{19|53P9} 70r35 75r39 80r35
-84a4 Zadania_2(58T14)
+16U11*Demo_Semaforow 16b11 138l5 138t19
+22U14 Demonstruj_Semafor_Binarny 22b14 56l8 56t34 115s4
+24w7 Mutex{26|4W19} 35r10 44r10
+27T17 Zadanie_Binarne 30b17 47l11 47t26 50r35
+31p10 My_ID{19|53P9} 33r38 39r42 41r42 46r38
+50a7 Zadania(27T17)
+62U14 Demonstruj_Semafor_Uogolniony 62b14 99l8 99t37 129s4
+64w7 Pula_Zasobow{27|4W19} 82r10 88r10
+67T17 Zadanie_Uogolnione 69b17 91l11 91t29 94r35
+71I18 Losowy_Zakres{positive} 72r68
+72K18 Losowe_Zasoby[11|44] 73r16 77r10 78r26
+73r10 Gen{11|50R9[72]} 77r30 78r47
+74i10 Ile_Potrzeba{positive} 78m10 80r78 82r25 88r25
+75p10 My_ID{19|53P9} 80r38 85r42 90r38
+94a7 Zadania(67T17)
 X 23 interfac.ads
 80M9*Unsigned_32
 83M9*Unsigned_64
 X 26 semafor_ogolny.ads
-1K9*Semafor_Ogolny 22|13w6 23r12 26|19e19
-4W19*Binary_Semaphore 22|23r27 26|17e24
-8Y13 P 22|34s13
-12U17 V 22|42s13
+1K9*Semafor_Ogolny 22|13w6 24r15 26|19e19
+4W19*Binary_Semaphore 22|24r30 26|17e24
+8Y13 P 22|35s16
+12U17 V 22|44s16
 X 27 semafor_uogolniony.ads
-1K9*Semafor_Uogolniony 22|14w6 55r19 27|22e23
-4W19*Counting_Semaphore 22|55r38 27|20e26
-7Y13 P 22|72s20
-11U17 V 22|78s20
+1K9*Semafor_Uogolniony 22|14w6 64r22 27|22e23
+4W19*Counting_Semaphore 22|64r41 27|20e26
+7Y13 P 22|82s23
+11U17 V 22|88s23
 X 49 s-rannum.ads
 77V13*Random{23|80M9} 50|224i21
 78V13*Random{23|83M9} 50|224i21

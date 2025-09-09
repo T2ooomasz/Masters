@@ -37,7 +37,7 @@ procedure Demo_Semaforow is
          -- --- POCZĄTEK SEKCJI KRYTYCZNEJ ---
          -- Tylko jedno zadanie może być tutaj w danym momencie.
          Put_Line("!!! Zadanie " & Image(My_ID) & " JEST W SEKCJI KRYTYCZNEJ !!!");
-         delay 2.0; -- Symulacja pracy w sekcji krytycznej
+         delay 0.2; -- Symulacja pracy w sekcji krytycznej
          Put_Line("    Zadanie " & Image(My_ID) & " kończy pracę w sekcji krytycznej");
          -- --- KONIEC SEKCJI KRYTYCZNEJ ---
          
@@ -47,10 +47,10 @@ procedure Demo_Semaforow is
       end Zadanie_Binarne;
       
       -- Tworzymy tablicę zadań - proste i działa
-      Zadania : array (1 .. 3) of Zadanie_Binarne;
+      Zadania : array (1 .. 5) of Zadanie_Binarne;
       
    begin
-      Put_Line("=== Utworzono 3 zadania dla semafora binarnego ===");
+      Put_Line("=== Utworzono zadania dla semafora binarnego ===");
       -- Ta procedura zakończy się dopiero gdy wszystkie zadania się zakończą
       -- (automatyczne czekanie na zadania potomne)
    end Demonstruj_Semafor_Binarny;
@@ -68,7 +68,7 @@ procedure Demo_Semaforow is
       
       task body Zadanie_Uogolnione is
          -- Ograniczamy zakres losowości, aby uniknąć deadlocka
-         subtype Losowy_Zakres is Positive range 1 .. 2;  -- Maksymalnie 2 zasoby
+         subtype Losowy_Zakres is Positive range 1 .. 1;  -- Maksymalnie 2 zasoby
          package Losowe_Zasoby is new Ada.Numerics.Discrete_Random(Losowy_Zakres);
          Gen : Losowe_Zasoby.Generator;
          Ile_Potrzeba : Positive;
@@ -83,7 +83,7 @@ procedure Demo_Semaforow is
          
          -- Posiadamy zasoby, wykonujemy pracę
          Put_Line("!!! Zadanie " & Image(My_ID) & " dostało zasoby i pracuje... !!!");
-         delay 1.5; -- Symulacja pracy
+         delay 0.2; -- Symulacja pracy
          
          Pula_Zasobow.V(Ile_Potrzeba); -- Zwróć zasoby do puli.
          
@@ -94,7 +94,7 @@ procedure Demo_Semaforow is
       Zadania : array (1 .. 4) of Zadanie_Uogolnione;
       
    begin
-      Put_Line("=== Utworzono 4 zadania dla semafora uogólnionego ===");
+      Put_Line("=== Utworzono zadania dla semafora uogólnionego ===");
       -- Ta procedura zakończy się dopiero gdy wszystkie zadania się zakończą
    end Demonstruj_Semafor_Uogolniony;
 
