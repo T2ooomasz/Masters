@@ -2,24 +2,22 @@
 -- ZADANIE 2: SEMAFOR UOGÓLNIONY (COUNTING)
 -- ========================================
 
-with Ada.Text_IO;
-
 package body Semafor_Uogolniony is
    
    protected body Counting_Semaphore is
       
-      entry P (Ile : Positive) when True is  -- Barrier always true for initial entry
+      entry P (Ile : Positive) when True is
       begin
          if Count >= Ile then
             Count := Count - Ile;
          else
-            requeue Wait (Ile);  -- Requeue to Wait if not enough; preserves queue order
+            requeue Wait;  -- Requeue to Wait without parameters
          end if;
       end P;
       
-      entry Wait (Ile : Positive) when Count >= Ile is  -- Barrier now valid (uses queued Ile)
+      entry Wait (Ile : Positive) when Count >= Ile is
       begin
-         Count := Count - Ile;
+         Count := Count - Ile;  -- Acquire resources after requeue
       end Wait;
       
       procedure V (Ile : Positive) is
