@@ -6,23 +6,14 @@ package body Semafor_Uogolniony is
    
    protected body Counting_Semaphore is
       
-      entry P (Ile : Positive) when True is
+      entry P when Count > 0 is
       begin
-         if Count >= Ile then
-            Count := Count - Ile;
-         else
-            requeue Wait with abort;  -- keep parameter Ile!
-         end if;
+         Count := Count - 1;
       end P;
       
-      entry Wait (Ile : Positive) when Count >= Ile is
+      procedure V is
       begin
-         Count := Count - Ile;
-      end Wait;
-      
-      procedure V (Ile : Positive) is
-      begin
-         Count := Count + Ile;
+         Count := Count + 1;
       end V;
       
       function Current_Value return Natural is
