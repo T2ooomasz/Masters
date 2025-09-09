@@ -6,19 +6,10 @@ package body Semafor_Uogolniony is
    
    protected body Counting_Semaphore is
       
-      entry P (Ile : Positive) when True is
+      entry P (Ile : Positive) when Count >= Ile is
       begin
-         if Count >= Ile then
-            Count := Count - Ile;
-         else
-            requeue Wait;  -- Requeue to Wait without parameters
-         end if;
+         Count := Count - Ile;
       end P;
-      
-      entry Wait (Ile : Positive) when Count >= Ile is
-      begin
-         Count := Count - Ile;  -- Acquire resources after requeue
-      end Wait;
       
       procedure V (Ile : Positive) is
       begin
