@@ -58,7 +58,8 @@ procedure Demo_Semaforow is
    task type Zadanie_Uogolnione;
    
    task body Zadanie_Uogolnione is
-      package Losowe_Zasoby is new Ada.Numerics.Discrete_Random(Positive range 1 .. 3);
+      subtype Losowy_Zakres is Positive range 1 .. 3;
+      package Losowe_Zasoby is new Ada.Numerics.Discrete_Random(Losowy_Zakres);
       Gen : Losowe_Zasoby.Generator;
       Ile_Potrzeba : Positive;
       My_ID : constant Task_Id := Current_Task;
