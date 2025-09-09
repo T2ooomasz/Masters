@@ -24,34 +24,30 @@ procedure Demo_Semaforow is
       Mutex : Semafor_Ogolny.Binary_Semaphore;
       
       -- Definicja typu zadania, które będzie próbowało uzyskać dostęp do sekcji
-      task type Zadanie_Binarne (ID : Integer);
+      task type Zadanie_Binarne;
       
       -- Implementacja zadania
       task body Zadanie_Binarne is
          My_ID : constant Task_Id := Current_Task;
       begin
-         Put_Line("Zadanie" & Integer'Image(ID) & " startuje i próbuje wejść do sekcji.");
+         Put_Line("Zadanie " & Image(My_ID) & " startuje i próbuje wejść do sekcji.");
          
          Mutex.P;  -- Poproś o dostęp. Zablokuje zadanie, jeśli sekcja jest zajęta.
          
          -- --- POCZĄTEK SEKCJI KRYTYCZNEJ ---
          -- Tylko jedno zadanie może być tutaj w danym momencie.
-         Put_Line("!!! Zadanie" & Integer'Image(ID) & " JEST W SEKCJI KRYTYCZNEJ !!!");
+         Put_Line("!!! Zadanie " & Image(My_ID) & " JEST W SEKCJI KRYTYCZNEJ !!!");
          delay 2.0; -- Symulacja pracy w sekcji krytycznej
-         Put_Line("    Zadanie" & Integer'Image(ID) & " kończy pracę w sekcji krytycznej");
+         Put_Line("    Zadanie " & Image(My_ID) & " kończy pracę w sekcji krytycznej");
          -- --- KONIEC SEKCJI KRYTYCZNEJ ---
          
          Mutex.V;  -- Zwolnij dostęp, aby inne zadanie mogło wejść.
          
-         Put_Line("Zadanie" & Integer'Image(ID) & " zakończyło pracę.");
+         Put_Line("Zadanie " & Image(My_ID) & " zakończyło pracę.");
       end Zadanie_Binarne;
       
-      -- Tworzymy tablicę zadań - wszystkie rozpoczną się automatycznie
-      Zadania : array (1 .. 3) of Zadanie_Binarne := (
-         1 => (ID => 1),
-         2 => (ID => 2), 
-         3 => (ID => 3)
-      );
+      -- Tworzymy tablicę zadań - proste i działa
+      Zadania : array (1 .. 3) of Zadanie_Binarne;
       
    begin
       Put_Line("=== Utworzono 3 zadania dla semafora binarnego ===");
@@ -68,7 +64,7 @@ procedure Demo_Semaforow is
       Pula_Zasobow : Semafor_Uogolniony.Counting_Semaphore(Initial_Count => 3);
 
       -- Definicja typu zadania, które będzie prosiło o zasoby
-      task type Zadanie_Uogolnione (ID : Integer);
+      task type Zadanie_Uogolnione;
       
       task body Zadanie_Uogolnione is
          -- Ograniczamy zakres losowości, aby uniknąć deadlocka
@@ -81,26 +77,21 @@ procedure Demo_Semaforow is
          Losowe_Zasoby.Reset(Gen);
          Ile_Potrzeba := Losowe_Zasoby.Random(Gen);
          
-         Put_Line("Zadanie" & Integer'Image(ID) & " potrzebuje" & Positive'Image(Ile_Potrzeba) & " zasobów.");
+         Put_Line("Zadanie " & Image(My_ID) & " potrzebuje" & Positive'Image(Ile_Potrzeba) & " zasobów.");
          
          Pula_Zasobow.P(Ile_Potrzeba); -- Poproś o 'Ile_Potrzeba' zasobów.
          
          -- Posiadamy zasoby, wykonujemy pracę
-         Put_Line("!!! Zadanie" & Integer'Image(ID) & " dostało zasoby i pracuje... !!!");
+         Put_Line("!!! Zadanie " & Image(My_ID) & " dostało zasoby i pracuje... !!!");
          delay 1.5; -- Symulacja pracy
          
          Pula_Zasobow.V(Ile_Potrzeba); -- Zwróć zasoby do puli.
          
-         Put_Line("Zadanie" & Integer'Image(ID) & " zakończyło pracę i zwróciło zasoby.");
+         Put_Line("Zadanie " & Image(My_ID) & " zakończyło pracę i zwróciło zasoby.");
       end Zadanie_Uogolnione;
       
-      -- Tworzymy tablicę zadań
-      Zadania : array (1 .. 4) of Zadanie_Uogolnione := (
-         1 => (ID => 1),
-         2 => (ID => 2),
-         3 => (ID => 3),
-         4 => (ID => 4)
-      );
+      -- Tworzymy tablicę zadań - proste i działa
+      Zadania : array (1 .. 4) of Zadanie_Uogolnione;
       
    begin
       Put_Line("=== Utworzono 4 zadania dla semafora uogólnionego ===");
