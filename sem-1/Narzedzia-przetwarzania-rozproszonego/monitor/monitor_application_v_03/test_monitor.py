@@ -15,12 +15,13 @@ def run_server(port):
 
 class BaseMonitorTestCase(unittest.TestCase):
     SERVER_PORT = 5555
-    SERVER_ADDRESS = f"tcp://localhost:{SERVER_PORT}"
+    SERVER_ADDRESS = None
     MONITOR_NAME = "test_monitor_global"
     server_process = None
 
     @classmethod
     def setUpClass(cls):
+        cls.SERVER_ADDRESS = f"tcp://localhost:{cls.SERVER_PORT}"
         cls.server_process = Process(target=run_server, args=(cls.SERVER_PORT,))
         cls.server_process.daemon = True
         cls.server_process.start()
@@ -48,6 +49,7 @@ class BaseMonitorTestCase(unittest.TestCase):
             cls.server_process.join()
 
 class TestMutexOperations(BaseMonitorTestCase):
+    SERVER_PORT = 5556
     def test_basic_enter_exit(self):
         monitor = DistributedMonitor(self.MONITOR_NAME, self.SERVER_ADDRESS)
         try:
@@ -76,6 +78,7 @@ class TestMutexOperations(BaseMonitorTestCase):
             monitor.close()
 
 class TestConcurrentAccess(BaseMonitorTestCase):
+    SERVER_PORT = 5557
     def test_mutual_exclusion(self):
         num_processes = 3
         barrier = Barrier(num_processes)
@@ -110,6 +113,7 @@ class TestConcurrentAccess(BaseMonitorTestCase):
                 self.assertFalse(max(start1, start2) < min(end1, end2), "Wykryto naruszenie wzajemnego wykluczania!")
 
 class TestConditionVariables(BaseMonitorTestCase):
+    SERVER_PORT = 5558
     def test_basic_wait_signal(self):
         barrier = Barrier(2)
         condition_name = "data_ready"
