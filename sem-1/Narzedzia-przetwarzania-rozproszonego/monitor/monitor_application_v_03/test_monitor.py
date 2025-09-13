@@ -44,7 +44,7 @@ class TestBasicConnectivity(BaseMonitorTestCase):
 
     def test_01_client_connection(self):
         """Test: Klient może się połączyć z serwerem i rozłączyć."""
-        print("\nTest: Klient może się połączyć z serwerem...")
+        print("\nTest: Klient może się połączyć z serwerem i rozłączyć.")
         try:
             client = DistributedMonitor(self.MONITOR_NAME, self.SERVER_ADDRESS)
             # Połączenie jest nawiązywane przy pierwszej operacji
