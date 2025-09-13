@@ -63,9 +63,12 @@ class TestMutexOperations(BaseMonitorTestCase):
         """Test: Podstawowe wejście/wyjście z monitora."""
         print("\nTest: Podstawowe wejście/wyjście z monitora...")
         monitor = DistributedMonitor(self.MONITOR_NAME, self.SERVER_ADDRESS)
-        with monitor:
-            self.assertTrue(monitor.is_entered())
-        self.assertFalse(monitor.is_entered())
+        try:
+            with monitor:
+                self.assertTrue(monitor.is_entered())
+            self.assertFalse(monitor.is_entered())
+        finally:
+            monitor.close()
         print("ok")
 
     def test_03_double_enter_error(self):
