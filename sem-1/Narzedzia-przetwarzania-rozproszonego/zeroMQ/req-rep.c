@@ -16,8 +16,7 @@ int main() {
     socket2 = zmq_socket(context, ZMQ_REQ);
     zmq_connect(socket2, "tcp://unixlab.cs.put.poznan.pl:5556");
     
-    // Your student ID number - replace with your actual album number
-    int album_number = 123456; // Replace with your actual student ID
+    int album_number = 165475; 
     
     char buffer[100];
     

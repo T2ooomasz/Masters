@@ -10,7 +10,7 @@ void test_rep_client(char *server_address) {
     
     zmq_connect(socket, server_address);
     
-    char *message = "Hello from Jan Kowalski";
+    char *message = "Hello from Tomasz Kazulak";
     char buffer[200];
     
     printf("Testing REP server at %s\n", server_address);
@@ -54,7 +54,7 @@ void test_push_client(char *server_address) {
     
     for(int i = 0; i < 3; i++) {
         char message[100];
-        snprintf(message, sizeof(message), "Test message %d from Jan Kowalski", i+1);
+        snprintf(message, sizeof(message), "Test message %d from Tomasz Kazulak", i+1);
         zmq_send(socket, message, strlen(message), 0);
         printf("Sent: %s\n", message);
         sleep(1);
@@ -75,8 +75,6 @@ int main(int argc, char *argv[]) {
     
     char *type = argv[1];
     char *address = argv[2];
-    
-    printf("Replace 'Jan Kowalski' with your actual name!\n\n");
     
     if (strcmp(type, "rep") == 0) {
         test_rep_client(address);

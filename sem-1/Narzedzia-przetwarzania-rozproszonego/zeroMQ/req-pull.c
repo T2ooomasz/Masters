@@ -10,8 +10,7 @@ int main() {
     // Connect to PULL service on port 6001
     zmq_connect(socket, "tcp://unixlab.cs.put.poznan.pl:6001");
     
-    // Your name and surname - replace with your actual name
-    char *my_name = "Jan Kowalski"; // Replace with your actual name
+    char *my_name = "Tomasz Kazulak";
     
     printf("Sending 3 messages to service 3 (PULL socket on port 6001)...\n\n");
     

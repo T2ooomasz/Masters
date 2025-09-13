@@ -23,7 +23,7 @@ void rep_server() {
         printf("REP received: %s\n", buffer);
         
         // Create response with your name appended
-        snprintf(response, sizeof(response), "%s - Response from Jan Kowalski", buffer);
+        snprintf(response, sizeof(response), "%s - Response from Tomasz Kazulak", buffer);
         
         // Send response
         zmq_send(socket, response, strlen(response), 0);
@@ -47,7 +47,7 @@ void pub_server() {
     
     while(1) {
         // Publish messages with your name
-        snprintf(message, sizeof(message), "Message %d from Jan Kowalski", counter++);
+        snprintf(message, sizeof(message), "Message %d from Tomasz Kazulak", counter++);
         zmq_send(socket, message, strlen(message), 0);
         printf("PUB sent: %s\n", message);
         sleep(2); // Send every 2 seconds
@@ -80,7 +80,6 @@ void pull_server() {
 
 int main() {
     printf("Starting all three servers...\n");
-    printf("Replace 'Jan Kowalski' with your actual name in the code!\n\n");
     
     pid_t pid1, pid2, pid3;
     
