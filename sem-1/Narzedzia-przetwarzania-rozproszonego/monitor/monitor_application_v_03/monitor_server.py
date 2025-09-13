@@ -67,6 +67,13 @@ class MonitorServer:
                 logging.debug(f"Otrzymano żądanie: {request}")
 
                 action = request.get("action")
+                
+                if action == "STOP_SERVER":
+                    response = {"status": "stopping"}
+                    self.zmq_socket.send_json(response)
+                    logging.info("Otrzymano polecenie STOP_SERVER. Zamykanie serwera.")
+                    break
+
                 monitor_name = request.get("monitor_name")
                 process_id = request.get("process_id") # Essential for all state-changing ops
                 
@@ -277,4 +284,3 @@ if __name__ == '__main__':
     finally:
         # Basic cleanup, actual socket/context cleanup is in start()
         logging.info("Serwer definitywnie zakończył działanie.")
-
