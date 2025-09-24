@@ -55,7 +55,7 @@ class BoundedBuffer:
                 #print(f"Bufor pusty ({len(self.buffer_proxy)}/{self.capacity}). Proces {self.monitor.process_id} czeka na '{self.COND_NOT_EMPTY}'...")
                 self.monitor.wait(self.COND_NOT_EMPTY)
             
-            item = self.buffer_proxy.pop(0) # Zakladajac, ze proxy ma metode pop(0) dla FIFO
+            item = self.buffer_proxy.popleft() # Uzywamy popleft() dla deque (FIFO)
             # print(f"Proces {self.monitor.process_id} pobral '{item}'. Bufor: {list(self.buffer_proxy)}")
             self.monitor.signal(self.COND_NOT_FULL)
             return item
