@@ -4,7 +4,9 @@ z rozproszonym monitorem.
 """
 import time
 import random
-from multiprocessing import Process, current_process, Manager
+from multiprocessing import Process, current_process
+from multiprocessing.managers import SyncManager
+from collections import deque
 import sys
 import os
 from monitor_client import DistributedMonitor, MonitorError, MonitorPool
@@ -92,10 +94,17 @@ if __name__ == "__main__":
     # Zamiast tego kazdy proces potomny utworzy wlasnego klienta DistributedMonitor.
     # BoundedBuffer bedzie tworzony w kazdym procesie potomnym, uzywajac tego samego monitor_name.
 
-    manager = Manager()
+    class DequeManager(SyncManager):
+        pass
+
+    DequeManager.register('Deque', deque)
+
+    manager = DequeManager()
+    manager.start()
+
     produced_items = manager.list()
     consumed_items = manager.list()
-    shared_actual_buffer = manager.list() # To bedzie nasz wspoldzielony bufor (jako lista)
+    shared_actual_buffer = manager.Deque()
 
     processes = []
     total_items_to_produce = NUM_PRODUCERS * ITEMS_PER_PRODUCER
