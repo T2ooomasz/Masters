@@ -18,8 +18,8 @@ SERVER_ADDRESS = "tcp://localhost:5555" # Upewnij sie, ze serwer monitora dziala
 MONITOR_NAME_BB = "test_monitor"
 BUFFER_CAPACITY = 5
 NUM_PRODUCERS = 2
-NUM_CONSUMERS = 2
-ITEMS_PER_PRODUCER = 10
+NUM_CONSUMERS = 5
+ITEMS_PER_PRODUCER = 20
 
 def producer_process(producer_id: int, 
                      monitor_name: str, 
@@ -76,21 +76,6 @@ if __name__ == "__main__":
     print(f"Pojemnosc bufora: {BUFFER_CAPACITY}")
     print(f"Liczba producentow: {NUM_PRODUCERS}, Konsumentow: {NUM_CONSUMERS}")
     print(f"Liczba elementow na producenta: {ITEMS_PER_PRODUCER}")
-
-    # Uzywamy MonitorPool, aby kazdy proces (producent/konsument) mial swoja instancje klienta monitora
-    # ale wszystkie odwolują sie do tego samego logicznego monitora na serwerze.
-    # W tym prostym przykladzie, kazdy proces tworzy wlasny monitor, co jest OK.
-    # Dla bardziej zlozonych scenariuszy, gdzie watki w procesie wspoldziela monitor, MonitorPool jest lepszy.
-    
-    # Tworzenie instancji monitora i bufora - te beda wspoldzielone przez referencje
-    # (ale kazdy proces bedzie mial wlasnego klienta monitora, jesli tak zaimplementujemy)
-    # W tym przypadku, dla uproszczenia, kazdy proces tworzy wlasnego klienta,
-    # ale odwoluje sie do tej samej nazwy monitora na serwerze.
-    
-    # Aby BoundedBuffer byl wspoldzielony, musimy go przekazac do procesow.
-    # DistributedMonitor sam w sobie nie jest latwo "picklable" dla multiprocessing.
-    # Zamiast tego kazdy proces potomny utworzy wlasnego klienta DistributedMonitor.
-    # BoundedBuffer bedzie tworzony w kazdym procesie potomnym, uzywajac tego samego monitor_name.
 
     manager = Manager()
     produced_items = manager.list()
