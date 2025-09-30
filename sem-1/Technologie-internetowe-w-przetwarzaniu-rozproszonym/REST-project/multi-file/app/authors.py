@@ -9,7 +9,9 @@ from .utils import (
     validate_author_data,
     paginate_data,
     generate_etag,
-    etag_precondition_check
+    etag_precondition_check,
+    idempotent,
+    idempotent_patch
 )
 
 # 1. Tworzymy instancję Blueprint.
@@ -53,7 +55,7 @@ def authors_collection():
         links = []
         # Ważna zmiana: url_for używa teraz 'nazwa_blueprintu.nazwa_funkcji'
         base_url = url_for('authors_api.authors_collection', _external=True)
-        pagination_info = result['pagination']
+        pagination_info = response.get_json()['pagination']
 
         if pagination_info['has_next']:
             next_url = f'{base_url}?page={page + 1}&limit={limit}'
@@ -69,21 +71,39 @@ def authors_collection():
         return response, 200
     
     elif request.method == 'POST':
-        try: data = request.get_json()
-        except Exception: return create_error_response("Invalid JSON", 400)
-        is_valid, error_msg = validate_author_data(data)
-        if not is_valid: return create_error_response("Validation error", 400, error_msg)
-        
-        author_id = str(uuid.uuid4())
-        author = {"id": author_id, "name": data['name'].strip(), "created_at": datetime.now().isoformat(), "updated_at": datetime.now().isoformat()}
-        if 'bio' in data and isinstance(data['bio'], str): author['bio'] = data['bio'].strip()
-        if 'birth_year' in data and isinstance(data['birth_year'], int): author['birth_year'] = data['birth_year']
-        author['etag'] = generate_etag(author)
-        authors[author_id] = author
-        
-        response = jsonify(author)
-        response.headers['Location'] = url_for('authors_api.author_resource', author_id=author_id, _external=True)
-        return response, 201
+        # Wywołaj idempotentną funkcję – dekorator obsłuży klucz i cache
+        return create_author()
+
+# Nowa funkcja dla POST – idempotentna
+@idempotent  # Twój dekorator z utils.py – wymaga Idempotency-Key
+def create_author():
+    """Tworzy nowego autora (idempotentne via Idempotency-Key)."""
+    try:
+        data = request.get_json()
+    except Exception:
+        return create_error_response("Invalid JSON", 400), 400
+    
+    is_valid, error_msg = validate_author_data(data)
+    if not is_valid:
+        return create_error_response("Validation error", 400, error_msg), 400
+    
+    author_id = str(uuid.uuid4())
+    author = {
+        "id": author_id, 
+        "name": data['name'].strip(), 
+        "created_at": datetime.now().isoformat(), 
+        "updated_at": datetime.now().isoformat()
+    }
+    if 'bio' in data and isinstance(data['bio'], str):
+        author['bio'] = data['bio'].strip()
+    if 'birth_year' in data and isinstance(data['birth_year'], int):
+        author['birth_year'] = data['birth_year']
+    author['etag'] = generate_etag(author)
+    authors[author_id] = author
+    
+    response = jsonify(author)
+    response.headers['Location'] = url_for('authors_api.author_resource', author_id=author_id, _external=True)
+    return response, 201  # Dekorator zapisze to tylko przy sukcesie
 
 @authors_bp.route('/<author_id>', methods=['GET', 'PUT', 'PATCH', 'DELETE'])
 def author_resource(author_id):
@@ -131,6 +151,7 @@ def update_author_put(author_id):
     return response, 200
 
 @etag_precondition_check(resource_collection=authors, required=False)
+@idempotent_patch # Wymaganie Idempotency-key
 def update_author_patch(author_id):
     """Obsługuje logikę dla PATCH /authors/{id} z opcjonalnym ETag."""
     try: data = request.get_json()

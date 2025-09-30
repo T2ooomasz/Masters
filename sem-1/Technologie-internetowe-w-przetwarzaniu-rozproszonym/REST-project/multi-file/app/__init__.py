@@ -46,5 +46,9 @@ def create_app():
     @app.errorhandler(500)
     def internal_server_error(error):
         return create_error_response("Internal Server Error", 500, "An unexpected error occurred")
+    
+    @app.route('/test')
+    def test():
+        return "Server is up!", 200
 
     return app

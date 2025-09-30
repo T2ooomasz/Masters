@@ -7,14 +7,14 @@ from .data import books, orders
 from .utils import (
     create_error_response,
     paginate_data,
-    idempotent_post
+    idempotent
 )
 
 # Tworzymy instancję Blueprint dla zamówień
 orders_bp = Blueprint('orders_api', __name__, url_prefix='/api/v1/orders')
 
 
-@idempotent_post
+@idempotent
 def create_order():
     """Tworzy nowe zlecenie (logika dla POST /orders)"""
     try:
@@ -76,7 +76,7 @@ def orders_collection():
 
         links = []
         base_url = url_for('orders_api.orders_collection', _external=True)
-        pagination_info = result['pagination']
+        pagination_info = response.get_json()['pagination']
 
         if pagination_info['has_next']: links.append(f'<{base_url}?page={page + 1}&limit={limit}>; rel="next"')
         if pagination_info['has_previous']: links.append(f'<{base_url}?page={page - 1}&limit={limit}>; rel="prev"')

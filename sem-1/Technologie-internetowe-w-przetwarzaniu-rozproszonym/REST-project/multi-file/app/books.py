@@ -9,7 +9,9 @@ from .utils import (
     validate_book_data,
     paginate_data,
     generate_etag,
-    etag_precondition_check
+    etag_precondition_check,
+    idempotent,
+    idempotent_patch
 )
 
 # Tworzymy instancję Blueprint dla książek
@@ -55,7 +57,7 @@ def books_collection():
         # Budowanie nagłówka Link dla paginacji
         links = []
         base_url = url_for('books_api.books_collection', _external=True)
-        pagination_info = result['pagination']
+        pagination_info = response.get_json()['pagination']
         
         if pagination_info['has_next']:
             next_url = f'{base_url}?page={page + 1}&limit={limit}'
@@ -71,7 +73,12 @@ def books_collection():
         return response, 200
     
     elif request.method == 'POST':
-        # Dodawanie nowej książki
+       return create_book()
+
+# Nowa funkcja dla POST – idempotentna
+@idempotent  # Twój dekorator z utils.py – wymaga Idempotency-Key
+def create_book():
+     # Dodawanie nowej książki
         try:
             data = request.get_json()
         except Exception:
@@ -162,6 +169,7 @@ def update_book_put(book_id):
     return response, 200
 
 @etag_precondition_check(resource_collection=books, required=False)
+@idempotent_patch # Wymaganie Idempotency-key
 def update_book_patch(book_id):
     """Obsługuje logikę dla PATCH /books/{id} z opcjonalnym ETag."""
     try:

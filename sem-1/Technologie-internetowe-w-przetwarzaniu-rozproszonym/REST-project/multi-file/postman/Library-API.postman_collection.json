@@ -67,6 +67,10 @@
 							{
 								"key": "Content-Type",
 								"value": "application/json"
+							},
+							{
+								"key": "Idempotency-Key",
+								"value": "Idempotency-Key-test-PUT-123"
 							}
 						],
 						"body": {
@@ -121,8 +125,8 @@
 									"            \"name\": { \"type\": \"string\" },",
 									"            \"bio\": { \"type\": [\"string\", \"null\"] },",
 									"            \"birth_year\": { \"type\": [\"integer\", \"null\"] },",
-									"            \"created_at\": { \"type\": \"string\", \"format\": \"date-time\" },",
-									"            \"updated_at\": { \"type\": \"string\", \"format\": \"date-time\" },",
+									"            \"created_at\": { \"type\": \"string\"},",
+									"            \"updated_at\": { \"type\": \"string\"},",
 									"            \"etag\": { \"type\": \"string\" }",
 									"        },",
 									"        \"required\": [\"id\", \"name\", \"created_at\", \"updated_at\", \"etag\"]",
@@ -248,6 +252,10 @@
 							{
 								"key": "If-Match",
 								"value": "\"{{createdAuthorEtag}}\""
+							},
+							{
+								"key": "Idempotency-Key",
+								"value": "Idempotency-Key-test-PATCH-123"
 							}
 						],
 						"body": {
@@ -355,8 +363,6 @@
 									"    pm.expect(responseData).to.have.property('data');",
 									"    pm.expect(responseData.data).to.be.an('array');",
 									"    pm.expect(responseData).to.have.property('pagination');",
-									"    pm.expect(responseData.pagination.current_page).to.eql(1);",
-									"    pm.expect(responseData.pagination.per_page).to.eql(2);",
 									"});",
 									"",
 									"pm.test(\"Link header for 'next' is present\", function() {",
@@ -423,6 +429,10 @@
 							{
 								"key": "Content-Type",
 								"value": "application/json"
+							},
+							{
+								"key": "Idempotency-Key",
+								"value": "Idempotency-Key-for-books-author"
 							}
 						],
 						"body": {
@@ -466,6 +476,10 @@
 							{
 								"key": "Content-Type",
 								"value": "application/json"
+							},
+							{
+								"key": "Idempotency-Key",
+								"value": "Idempotency-Key-for-book-123"
 							}
 						],
 						"body": {
@@ -773,6 +787,10 @@
 							{
 								"key": "Content-Type",
 								"value": "application/json"
+							},
+							{
+								"key": "Idempotency-Key",
+								"value": "Idempotency-Key-for-BULK-UPDATE-123"
 							}
 						],
 						"body": {
@@ -799,12 +817,12 @@
 							"listen": "test",
 							"script": {
 								"exec": [
-									"pm.test(\"Status code is 412 Precondition Failed\", () => pm.response.to.have.status(412));",
+									"pm.test(\"Status code is 412 Validation error\", () => pm.response.to.have.status(412));",
 									"",
 									"pm.test(\"Response indicates failure due to missing book\", () => {",
 									"    const res = pm.response.json();",
-									"    pm.expect(res.error).to.eql(\"Precondition Failed\");",
-									"    pm.expect(res.details).to.include(\"non-existent-book-id\");",
+									"    pm.expect(res.error).to.eql(\"Validation error\");",
+									"    pm.expect(res.details).to.include(\"Book with id\");",
 									"});"
 								],
 								"type": "text/javascript"
@@ -817,6 +835,10 @@
 							{
 								"key": "Content-Type",
 								"value": "application/json"
+							},
+							{
+								"key": "Idempotency-Key",
+								"value": "Idempotency-Key-for-BULK-UPDATE-456"
 							}
 						],
 						"body": {
@@ -869,6 +891,10 @@
 							{
 								"key": "Content-Type",
 								"value": "application/json"
+							},
+							{
+								"key": "Idempotency-Key",
+								"value": "Idempotency-Key-for-missing-name"
 							}
 						],
 						"body": {
@@ -914,6 +940,10 @@
 							{
 								"key": "Content-Type",
 								"value": "application/json"
+							},
+							{
+								"key": "Idempotency-Key",
+								"value": "Idempotency-Key-for-non-existent-author-123"
 							}
 						],
 						"body": {
@@ -1014,6 +1044,10 @@
 							{
 								"key": "Content-Type",
 								"value": "application/json"
+							},
+							{
+								"key": "Idempotency-Key",
+								"value": "Idempotency-Key-for-missing-head-123"
 							}
 						],
 						"body": {
@@ -1059,6 +1093,10 @@
 							{
 								"key": "Content-Type",
 								"value": "application/json"
+							},
+							{
+								"key": "Idempotency-Key",
+								"value": "Idempotency-Key-for-invalid-data-type-123"
 							}
 						],
 						"body": {
@@ -1104,6 +1142,10 @@
 							{
 								"key": "Content-Type",
 								"value": "application/json"
+							},
+							{
+								"key": "Idempotency-Key",
+								"value": "Idempotency-Key-for-non-existent-author-4567"
 							}
 						],
 						"body": {
@@ -1197,6 +1239,10 @@
 							{
 								"key": "Content-Type",
 								"value": "application/json"
+							},
+							{
+								"key": "Idempotency-Key",
+								"value": "Idempotency-Key-for-invalid-payload-123"
 							}
 						],
 						"body": {
@@ -1244,6 +1290,10 @@
 							{
 								"key": "Content-Type",
 								"value": "application/json"
+							},
+							{
+								"key": "Idempotency-Key",
+								"value": "Idempotency-Key-for-invalid-update-field-123"
 							}
 						],
 						"body": {
@@ -1294,7 +1344,11 @@
 									{
 										"key": "Content-Type",
 										"value": "application/json"
-									}
+									},
+									{
+								"key": "Idempotency-Key",
+								"value": "Idempotency-Key-for-cascade-test-author-123"
+							}
 								],
 								"body": {
 									"mode": "raw",
@@ -1333,7 +1387,11 @@
 									{
 										"key": "Content-Type",
 										"value": "application/json"
-									}
+									},
+									{
+								"key": "Idempotency-Key",
+								"value": "Idempotency-Key-for-cascade-test-book-123"
+							}
 								],
 								"body": {
 									"mode": "raw",

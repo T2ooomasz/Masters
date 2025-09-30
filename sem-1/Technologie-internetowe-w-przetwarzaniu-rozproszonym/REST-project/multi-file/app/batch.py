@@ -6,14 +6,15 @@ from .data import authors, books
 from .utils import (
     create_error_response,
     generate_etag,
-    idempotent_post
+    idempotent,
+    validate_batch_update_data
 )
 
 # Tworzymy instancję Blueprint dla operacji wsadowych
 batch_bp = Blueprint('batch_api', __name__, url_prefix='/api/v1/batch')
 
 
-@idempotent_post
+@idempotent
 @batch_bp.route('/bulk-update', methods=['POST'])
 def bulk_update():
     """
@@ -24,37 +25,10 @@ def bulk_update():
     book_ids = data.get('bookIds')
     updates = data.get('updates')
 
-    # Walidacja wejścia
-    if not isinstance(book_ids, list) or not isinstance(updates, dict):
-        return create_error_response("Invalid payload format", 400)
-
-    # Faza 1: Walidacja ("All or Nothing")
-    not_found_ids = [book_id for book_id in book_ids if book_id not in books]
-    if not_found_ids:
-        return create_error_response(
-            "Precondition Failed", 412,
-            f"Operation failed. The following books were not found: {not_found_ids}"
-        )
-
-    updatable_fields = {
-        'title': lambda v: isinstance(v, str) and v.strip(),
-        'author_id': lambda v: isinstance(v, str) and v.strip() and v in authors,
-        'copies': lambda v: isinstance(v, int) and v >= 0,
-        'isbn': lambda v: isinstance(v, str) or v is None,
-        'publication_year': lambda v: isinstance(v, int) or v is None,
-        'description': lambda v: isinstance(v, str) or v is None
-    }
-    
-    for field, value in updates.items():
-        if field not in updatable_fields:
-            return create_error_response(
-                "Validation error", 400, f"Field '{field}' cannot be updated."
-            )
-        # Poprawka błędu: updatable_fieldsfield -> updatable_fields[field](value)
-        if not updatable_fields[field](value):
-            return create_error_response(
-                "Validation error", 400, f"Invalid value provided for field '{field}'."
-            )
+    # Używamy nowej funkcji walidującej
+    is_valid, error_msg = validate_batch_update_data(data)
+    if not is_valid:
+        return create_error_response("Validation error", 412, error_msg)
 
     # Faza 2: Wykonanie (Commit)
     updated_books = []
