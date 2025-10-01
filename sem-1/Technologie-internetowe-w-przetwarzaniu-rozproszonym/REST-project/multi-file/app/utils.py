@@ -4,7 +4,6 @@ from datetime import datetime
 from functools import wraps
 from flask import jsonify, request
 
-# Używamy importu relatywnego, aby odwołać się do modułów w tym samym pakiecie
 from .data import authors, books, idempotency_keys
 
 def generate_etag(data):
@@ -45,37 +44,58 @@ def etag_precondition_check(resource_collection, required=False):
     def decorator(func):
         @wraps(func)
         def wrapper(*args, **kwargs):
-            # Dynamiczne wyciąganie resource_id z kwargs (dla authors lub books)
-            resource_id = kwargs.get('author_id') or kwargs.get('book_id')
+            # Dynamiczne pobieranie resource_id z view_args (parametry route w Flask)
+            view_args = getattr(request, 'view_args', {})
+            resource_id = None
+            for key, value in view_args.items():
+                if isinstance(value, str) and value:  # Weź pierwszy niepusty string (zazwyczaj ID)
+                    resource_id = value
+                    break
+            
             if not resource_id:
-                # Fallback: jeśli nie ma w kwargs, sprawdź args (rzadki przypadek, ale na wszelki wypadek)
-                if args:
-                    resource_id = args[0]  # Pierwszy arg z route to zazwyczaj ID
+                return create_error_response("Bad Request", 400, "No resource ID found in route parameters.")
 
             if resource_id not in resource_collection:
                 return create_error_response("Not Found", 404, f"Resource with id '{resource_id}' not found.")
 
             resource = resource_collection[resource_id]
-            current_etag = f'"{resource["etag"]}"'
+            current_etag_raw = resource["etag"]  # Raw ETag bez quotes
 
-            if_match = request.headers.get('If-Match')
-            if_none_match = request.headers.get('If-None-Match')
+            # Strip quotes z client headers
+            if_match = (request.headers.get('If-Match') or '').strip('"')
+            if_none_match = (request.headers.get('If-None-Match') or '').strip('"')
 
             if required and not if_match:
-                return create_error_response("Precondition Required", 428, "If-Match header is required for this operation.")
+                err = create_error_response("Precondition Required", 428, "If-Match header is required for this operation.")
+                # Obsługa tuple lub Response
+                if isinstance(err, tuple):
+                    err[0].headers['ETag'] = f'"{current_etag_raw}"'
+                    return err
+                else:
+                    err.headers['ETag'] = f'"{current_etag_raw}"'
+                    return err
 
-            if if_match and if_match != current_etag:
-                return create_error_response("Precondition Failed", 412, "ETag does not match the current version of the resource.")
+            if if_match and if_match != current_etag_raw:
+                err = create_error_response("Precondition Failed", 412, "ETag does not match the current version of the resource.")
+                # Obsługa tuple lub Response
+                if isinstance(err, tuple):
+                    err[0].headers['ETag'] = f'"{current_etag_raw}"'
+                    return err
+                else:
+                    err.headers['ETag'] = f'"{current_etag_raw}"'
+                    return err
 
-            if if_none_match and if_none_match == current_etag:
-                return jsonify(resource), 304  # Not Modified
+            if if_none_match and if_none_match == current_etag_raw:
+                resp = jsonify(resource)
+                resp.status_code = 304  # Not Modified
+                return resp
 
-            # Przekazuj wszystkie args/kwargs dalej – bez narzucania book_id/author_id
+            # Przekazuj dalej
             return func(*args, **kwargs)
         return wrapper
     return decorator
 
-def create_book_with_etag(book_data, book_id=None):
+'''def create_book_with_etag(book_data, book_id=None):
     """Tworzy książkę z automatycznym ETag"""
     if book_id is None:
         book_id = str(uuid.uuid4())
@@ -91,7 +111,7 @@ def create_book_with_etag(book_data, book_id=None):
 
     # Generujemy ETag na podstawie czystych danych
     book["etag"] = generate_etag(book)
-    return book
+    return book'''
 
 def validate_author_data(data):
     """Waliduje dane autora"""
@@ -196,7 +216,7 @@ def idempotent(func):
         idempotency_key = request.headers.get('Idempotency-Key')
         if not idempotency_key:
             err_response = create_error_response("Idempotency-Key header is required", 400)
-            return err_response, 400  # Zawsze tuple dla spójności
+            return err_response # Tuple
 
         if idempotency_key in idempotency_keys:
             cached_data, status_code = idempotency_keys[idempotency_key]
@@ -243,19 +263,40 @@ def idempotent(func):
 def idempotent_patch(func):
     @wraps(func)
     def wrapper(*args, **kwargs):
-        resource_id = kwargs.get('author_id') or kwargs.get('book_id')  # Dynamicznie
+        # Dynamiczne pobieranie resource_id z view_args (działa dla author_id, book_id, order_id)
+        view_args = getattr(request, 'view_args', {})
+        resource_id = None
+        for key, value in view_args.items():
+            if isinstance(value, str) and value:
+                resource_id = value
+                break
+        
         idempotency_key = request.headers.get('Idempotency-Key')
-        full_key = f"patch_{resource_id}_{idempotency_key}" if idempotency_key else None
+        if not idempotency_key:
+            err_response = create_error_response("Idempotency-Key header is required", 400)
+            return err_response  # Tuple, jak w idempotent
         
-        if full_key and full_key in idempotency_keys:
-            response_data, status_code = idempotency_keys[full_key]
-            return jsonify(response_data), status_code
+        # Utwórz full_key: patch_resourceId_key lub tylko key (fallback)
+        full_key = f"patch_{resource_id}_{idempotency_key}" if resource_id else f"patch_{idempotency_key}"
         
-        response, status_code = func(*args, **kwargs)
+        if full_key in idempotency_keys:
+            cached_data, status_code = idempotency_keys[full_key]
+            cached_response = jsonify(cached_data)
+            return cached_response, status_code
+
+        # Wywołaj func i obsłuż różne formaty zwrotów (jak w idempotent)
+        func_result = func(*args, **kwargs)
+        if isinstance(func_result, tuple):
+            response, status_code = func_result
+        else:
+            response = func_result
+            status_code = getattr(response, 'status_code', 200)
         
-        if idempotency_key and 200 <= status_code < 300:
-            idempotency_keys[full_key] = (response.get_json(), status_code)
-        
+        # Zapisuj tylko przy sukcesie
+        if 200 <= status_code < 300:
+            cache_data = response.get_json() if hasattr(response, 'get_json') else {}
+            idempotency_keys[full_key] = (cache_data, status_code)
+            
         return response, status_code
     return wrapper
 

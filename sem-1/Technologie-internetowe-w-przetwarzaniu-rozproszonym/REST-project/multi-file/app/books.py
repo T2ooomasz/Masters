@@ -1,5 +1,6 @@
 import uuid
 from datetime import datetime
+from copy import deepcopy  # Dodany dla bezpiecznych snapshotów
 from flask import Blueprint, request, jsonify, url_for
 
 # Importy relatywne z naszego pakietu 'app'
@@ -75,8 +76,7 @@ def books_collection():
     elif request.method == 'POST':
        return create_book()
 
-# Nowa funkcja dla POST – idempotentna
-@idempotent  # Twój dekorator z utils.py – wymaga Idempotency-Key
+@idempotent  # Wymaga Idempotency-Key
 def create_book():
      # Dodawanie nowej książki
         try:
@@ -89,7 +89,7 @@ def create_book():
         if not is_valid:
             return create_error_response("Validation error", 400, error_msg)
         
-        # Tworzenie nowej książki
+        # Tworzenie nowej książki (nie potrzeba snapshota, bo nowy zasób)
         book_id = str(uuid.uuid4())
         book = {
             "id": book_id,
@@ -105,13 +105,25 @@ def create_book():
         if 'description' in data and isinstance(data['description'], str): book['description'] = data['description'].strip()
         
         book['etag'] = generate_etag(book)
-        books[book_id] = book
         book['author_name'] = authors[data['author_id']]['name']
         
-        response = jsonify(book)
-        # Zgodnie ze standardem REST, dla 201 Created używamy nagłówka Location
-        response.headers['Location'] = url_for('books_api.book_resource', book_id=book_id, _external=True)
-        return response, 201
+        # Faza 1: Snapshot niepotrzebny (nowy zasób), ale try-except dla atomowości zapisu
+        try:
+            # Faza 2: Wykonanie – zapis
+            books[book_id] = book
+            
+            # Commit: Sukces
+            response = jsonify(book)
+            response.headers['Location'] = url_for('books_api.book_resource', book_id=book_id, _external=True)
+            return response, 201
+            
+        except Exception as e:
+            # Faza 3: Rollback – nie zapisano, stan niezmieniony
+            return create_error_response(
+                "Transaction failed",
+                500,
+                f"Error during book creation: {str(e)}. No changes applied."
+            )
 
 @books_bp.route('/<book_id>', methods=['GET', 'PUT', 'PATCH', 'DELETE'])
 def book_resource(book_id):
@@ -137,7 +149,7 @@ def book_resource(book_id):
 
 @etag_precondition_check(resource_collection=books, required=True)
 def update_book_put(book_id):
-    """Obsługuje logikę dla PUT /books/{id} z wymaganym ETag."""
+    """Obsługuje logikę dla PUT /books/{id} z wymaganym ETag – atomowo."""
     try:
         data = request.get_json()
     except Exception:
@@ -147,31 +159,44 @@ def update_book_put(book_id):
     if not is_valid:
         return create_error_response("Validation error", 400, error_msg)
 
-    current_book = books[book_id]
-    updated_book = {
-        "id": book_id,
-        "title": data['title'].strip(),
-        "author_id": data['author_id'],
-        "copies": data.get('copies', 1),
-        "created_at": current_book['created_at'],
-        "updated_at": datetime.now().isoformat()
-    }
+    current_book = deepcopy(books[book_id])  # Faza 1: Snapshot bieżącego zasobu
 
-    if 'isbn' in data: updated_book['isbn'] = data['isbn'].strip()
-    if 'publication_year' in data: updated_book['publication_year'] = data['publication_year']
-    if 'description' in data: updated_book['description'] = data['description'].strip()
+    try:
+        # Faza 2: Wykonanie aktualizacji
+        updated_book = {
+            "id": book_id,
+            "title": data['title'].strip(),
+            "author_id": data['author_id'],
+            "copies": data.get('copies', 1),
+            "created_at": current_book['created_at'],
+            "updated_at": datetime.now().isoformat()
+        }
 
-    updated_book['etag'] = generate_etag(updated_book)
-    books[book_id] = updated_book
+        if 'isbn' in data: updated_book['isbn'] = data['isbn'].strip()
+        if 'publication_year' in data: updated_book['publication_year'] = data['publication_year']
+        if 'description' in data: updated_book['description'] = data['description'].strip()
 
-    response = jsonify(updated_book)
-    response.headers['ETag'] = f'"{updated_book["etag"]}"'
-    return response, 200
+        updated_book['etag'] = generate_etag(updated_book)
+        books[book_id] = updated_book
+
+        # Commit: Sukces
+        response = jsonify(updated_book)
+        response.headers['ETag'] = f'"{updated_book["etag"]}"'
+        return response, 200
+        
+    except Exception as e:
+        # Faza 3: Rollback zasobu
+        books[book_id] = current_book
+        return create_error_response(
+            "Transaction failed",
+            500,
+            f"Error during book update: {str(e)}. Book state rolled back."
+        )
 
 @etag_precondition_check(resource_collection=books, required=False)
 @idempotent_patch # Wymaganie Idempotency-key
 def update_book_patch(book_id):
-    """Obsługuje logikę dla PATCH /books/{id} z opcjonalnym ETag."""
+    """Obsługuje logikę dla PATCH /books/{id} z opcjonalnym ETag – atomowo."""
     try:
         data = request.get_json()
     except Exception:
@@ -180,32 +205,51 @@ def update_book_patch(book_id):
     if not data or not isinstance(data, dict):
         return create_error_response("Request body must be a non-empty JSON object", 400)
 
-    current_book = books[book_id].copy()
-    validation_errors = []
+    current_book = deepcopy(books[book_id])  # Faza 1: Snapshot bieżącego zasobu
 
-    updatable_fields = {
-        'title': lambda v: isinstance(v, str) and v.strip(),
-        'author_id': lambda v: isinstance(v, str) and v.strip() and v in authors,
-        'copies': lambda v: isinstance(v, int) and v >= 0,
-        'isbn': lambda v: isinstance(v, str) or v is None,
-        'publication_year': lambda v: isinstance(v, int) or v is None,
-        'description': lambda v: isinstance(v, str) or v is None
-    }
+    try:
+        # Faza 2: Walidacja i wykonanie
+        validation_errors = []
 
-    for field, value in data.items():
-        if field in updatable_fields:
-            if updatable_fields[field](value):
-                if value is None: current_book.pop(field, None)
-                else: current_book[field] = value.strip() if isinstance(value, str) else value
-            else: validation_errors.append(f"Invalid value for field '{field}'")
+        updatable_fields = {
+            'title': lambda v: isinstance(v, str) and v.strip(),
+            'author_id': lambda v: isinstance(v, str) and v.strip() and v in authors,
+            'copies': lambda v: isinstance(v, int) and v >= 0,
+            'isbn': lambda v: isinstance(v, str) or v is None,
+            'publication_year': lambda v: isinstance(v, int) or v is None,
+            'description': lambda v: isinstance(v, str) or v is None
+        }
 
-    if validation_errors: return create_error_response("Validation error", 400, ", ".join(validation_errors))
-    current_book['updated_at'] = datetime.now().isoformat()
-    current_book['etag'] = generate_etag(current_book)
-    books[book_id] = current_book
-    response = jsonify(current_book)
-    response.headers['ETag'] = f'"{current_book["etag"]}"'
-    return response, 200
+        for field, value in data.items():
+            if field in updatable_fields:
+                if updatable_fields[field](value):
+                    if value is None: current_book.pop(field, None)
+                    else: current_book[field] = value.strip() if isinstance(value, str) else value
+                else: validation_errors.append(f"Invalid value for field '{field}'")
+
+        if validation_errors: 
+            raise ValueError(", ".join(validation_errors))  # Rzuć, by wejść w rollback
+
+        current_book['updated_at'] = datetime.now().isoformat()
+        current_book['etag'] = generate_etag(current_book)
+        books[book_id] = current_book
+
+        # Commit: Sukces
+        response = jsonify(current_book)
+        response.headers['ETag'] = f'"{current_book["etag"]}"'
+        return response, 200
+        
+    except ValueError as ve:
+        # Obsługa błędów walidacji (bez rollbacku, bo stan niezmieniony)
+        return create_error_response("Validation error", 400, str(ve))
+    except Exception as e:
+        # Faza 3: Rollback dla innych błędów
+        books[book_id] = current_book
+        return create_error_response(
+            "Transaction failed",
+            500,
+            f"Error during book patch: {str(e)}. Book state rolled back."
+        )
 
 @etag_precondition_check(resource_collection=books, required=False)
 def delete_book(book_id):

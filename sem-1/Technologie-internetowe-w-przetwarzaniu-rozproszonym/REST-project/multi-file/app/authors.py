@@ -1,9 +1,10 @@
 import uuid
 from datetime import datetime
+from copy import deepcopy  # Dla bezpiecznych snapshotów
 from flask import Blueprint, request, jsonify, url_for
 
 # Importy relatywne z naszego pakietu 'app'
-from .data import authors
+from .data import authors, books  # Books dla kaskadowego usuwania
 from .utils import (
     create_error_response,
     validate_author_data,
@@ -81,11 +82,11 @@ def create_author():
     try:
         data = request.get_json()
     except Exception:
-        return create_error_response("Invalid JSON", 400), 400
+        return create_error_response("Invalid JSON", 400)
     
     is_valid, error_msg = validate_author_data(data)
     if not is_valid:
-        return create_error_response("Validation error", 400, error_msg), 400
+        return create_error_response("Validation error", 400, error_msg)
     
     author_id = str(uuid.uuid4())
     author = {
@@ -99,11 +100,24 @@ def create_author():
     if 'birth_year' in data and isinstance(data['birth_year'], int):
         author['birth_year'] = data['birth_year']
     author['etag'] = generate_etag(author)
-    authors[author_id] = author
     
-    response = jsonify(author)
-    response.headers['Location'] = url_for('authors_api.author_resource', author_id=author_id, _external=True)
-    return response, 201  # Dekorator zapisze to tylko przy sukcesie
+    # Faza 1: Snapshot niepotrzebny (nowy zasób), ale try-except dla atomowości zapisu
+    try:
+        # Faza 2: Wykonanie – zapis
+        authors[author_id] = author
+        
+        # Commit: Sukces
+        response = jsonify(author)
+        response.headers['Location'] = url_for('authors_api.author_resource', author_id=author_id, _external=True)
+        return response, 201
+        
+    except Exception as e:
+        # Faza 3: Rollback – nie zapisano, stan niezmieniony
+        return create_error_response(
+            "Transaction failed",
+            500,
+            f"Error during author creation: {str(e)}. No changes applied."
+        )
 
 @authors_bp.route('/<author_id>', methods=['GET', 'PUT', 'PATCH', 'DELETE'])
 def author_resource(author_id):
@@ -135,48 +149,153 @@ def author_resource(author_id):
 
 @etag_precondition_check(resource_collection=authors, required=True)
 def update_author_put(author_id):
-    """Obsługuje logikę dla PUT /authors/{id} z wymaganym ETag."""
-    try: data = request.get_json()
-    except Exception: return create_error_response("Invalid JSON", 400)
+    """Obsługuje logikę dla PUT /authors/{id} z wymaganym ETag – atomowo."""
+    try:
+        data = request.get_json()
+    except Exception:
+        return create_error_response("Invalid JSON", 400)
+
     is_valid, error_msg = validate_author_data(data)
-    if not is_valid: return create_error_response("Validation error", 400, error_msg)
-    current_author = authors[author_id]
-    updated_author = {"id": author_id, "name": data['name'].strip(), "created_at": current_author['created_at'], "updated_at": datetime.now().isoformat()}
-    if 'bio' in data: updated_author['bio'] = data.get('bio', '').strip()
-    if 'birth_year' in data: updated_author['birth_year'] = data.get('birth_year')
-    updated_author['etag'] = generate_etag(updated_author)
-    authors[author_id] = updated_author
-    response = jsonify(updated_author)
-    response.headers['ETag'] = f'"{updated_author["etag"]}"'
-    return response, 200
+    if not is_valid:
+        return create_error_response("Validation error", 400, error_msg)
+
+    current_author = deepcopy(authors[author_id])  # Faza 1: Snapshot bieżącego zasobu
+
+    try:
+        # Faza 2: Wykonanie aktualizacji
+        updated_author = {
+            "id": author_id,
+            "name": data['name'].strip(),
+            "created_at": current_author['created_at'],
+            "updated_at": datetime.now().isoformat()
+        }
+        if 'bio' in data:
+            updated_author['bio'] = data['bio'].strip() if isinstance(data['bio'], str) else ''
+        if 'birth_year' in data:
+            updated_author['birth_year'] = data['birth_year'] if isinstance(data['birth_year'], int) else None
+
+        updated_author['etag'] = generate_etag(updated_author)
+        authors[author_id] = updated_author
+
+        # Commit: Sukces
+        response = jsonify(updated_author)
+        response.headers['ETag'] = f'"{updated_author["etag"]}"'
+        return response, 200
+        
+    except Exception as e:
+        # Faza 3: Rollback zasobu
+        authors[author_id] = current_author
+        return create_error_response(
+            "Transaction failed",
+            500,
+            f"Error during author update: {str(e)}. Author state rolled back."
+        )
 
 @etag_precondition_check(resource_collection=authors, required=False)
 @idempotent_patch # Wymaganie Idempotency-key
 def update_author_patch(author_id):
-    """Obsługuje logikę dla PATCH /authors/{id} z opcjonalnym ETag."""
-    try: data = request.get_json()
-    except Exception: return create_error_response("Invalid JSON", 400)
-    if not data or not isinstance(data, dict): return create_error_response("Request body must be a non-empty JSON object", 400)
-    current_author = authors[author_id].copy()
-    validation_errors = []
-    updatable_fields = {'name': lambda v: isinstance(v, str) and v.strip(), 'bio': lambda v: isinstance(v, str) or v is None, 'birth_year': lambda v: isinstance(v, int) or v is None}
-    for field, value in data.items():
-        if field in updatable_fields:
-            if updatable_fields[field](value):
-                if value is None: current_author.pop(field, None)
-                else: current_author[field] = value.strip() if isinstance(value, str) else value
-            else: validation_errors.append(f"Invalid value for field '{field}'")
-    if validation_errors: return create_error_response("Validation error", 400, ", ".join(validation_errors))
-    if 'name' not in current_author or not current_author.get('name'): return create_error_response("Validation error", 400, "Field 'name' cannot be removed or empty")
-    current_author['updated_at'] = datetime.now().isoformat()
-    current_author['etag'] = generate_etag(current_author)
-    authors[author_id] = current_author
-    response = jsonify(current_author)
-    response.headers['ETag'] = f'"{current_author["etag"]}"'
-    return response, 200
+    """Obsługuje logikę dla PATCH /authors/{id} z opcjonalnym ETag – atomowo."""
+    try:
+        data = request.get_json()
+    except Exception:
+        return create_error_response("Invalid JSON", 400)
+
+    if not data or not isinstance(data, dict):
+        return create_error_response("Request body must be a non-empty JSON object", 400)
+
+    current_author = deepcopy(authors[author_id])  # Faza 1: Snapshot bieżącego zasobu
+
+    try:
+        # Faza 2: Walidacja i wykonanie
+        validation_errors = []
+
+        updatable_fields = {
+            'name': lambda v: isinstance(v, str) and v.strip(),
+            'bio': lambda v: isinstance(v, str) or v is None,
+            'birth_year': lambda v: isinstance(v, int) or v is None
+        }
+
+        for field, value in data.items():
+            if field in updatable_fields:
+                if updatable_fields[field](value):
+                    if value is None:
+                        current_author.pop(field, None)
+                    else:
+                        current_author[field] = value.strip() if isinstance(value, str) else value
+                else:
+                    validation_errors.append(f"Invalid value for field '{field}'")
+
+        if validation_errors:
+            raise ValueError(", ".join(validation_errors))  # Rzuć, by wejść w except
+
+        # Dodatkowa walidacja: name nie może być puste
+        if 'name' not in current_author or not current_author.get('name'):
+            raise ValueError("Field 'name' cannot be removed or empty")
+
+        current_author['updated_at'] = datetime.now().isoformat()
+        current_author['etag'] = generate_etag(current_author)
+        authors[author_id] = current_author
+
+        # Commit: Sukces
+        response = jsonify(current_author)
+        response.headers['ETag'] = f'"{current_author["etag"]}"'
+        return response, 200
+        
+    except ValueError as ve:
+        # Obsługa błędów walidacji (bez rollbacku, bo stan niezmieniony)
+        return create_error_response("Validation error", 400, str(ve))
+    except Exception as e:
+        # Faza 3: Rollback dla innych błędów
+        authors[author_id] = current_author
+        return create_error_response(
+            "Transaction failed",
+            500,
+            f"Error during author patch: {str(e)}. Author state rolled back."
+        )
 
 @etag_precondition_check(resource_collection=authors, required=False)
 def delete_author(author_id):
-    """Obsługuje logikę dla DELETE /authors/{id} z opcjonalnym ETag."""
-    del authors[author_id]
-    return '', 204
+    """Obsługuje logikę dla DELETE /authors/{id} z opcjonalnym ETag – atomowo z kaskadowym usuwaniem książek."""
+    if author_id not in authors:
+        return create_error_response("Author not found", 404, f"Author {author_id} does not exist")
+    
+    # Faza 1: Znajdź i snapshot dotknięte zasoby
+    current_author = deepcopy(authors[author_id])  # Snapshot autora
+    
+    # Znajdź książki tego autora
+    books_to_delete = {book_id: deepcopy(book) for book_id, book in books.items() if book['author_id'] == author_id}
+    if not books_to_delete:
+        # Jeśli brak książek, po prostu usuń autora
+        try:
+            del authors[author_id]
+            return '', 204
+        except Exception as e:
+            authors[author_id] = current_author
+            return create_error_response(
+                "Transaction failed",
+                500,
+                f"Error during author deletion: {str(e)}. Author state rolled back."
+            )
+    
+    try:
+        # Faza 2: Wykonanie atomowe
+        # Usuń książki
+        for book_id in books_to_delete:
+            del books[book_id]
+        
+        # Usuń autora
+        del authors[author_id]
+        
+        # Commit: Sukces (DELETE zwraca 204, bez body)
+        return '', 204
+        
+    except Exception as e:
+        # Faza 3: Rollback – przywróć autora i książki
+        authors[author_id] = current_author
+        for book_id, snapshot in books_to_delete.items():
+            books[book_id] = snapshot
+        return create_error_response(
+            "Transaction failed",
+            500,
+            f"Error during author deletion: {str(e)}. Author and books state rolled back."
+        )
